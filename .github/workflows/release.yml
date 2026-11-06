@@ -1,0 +1,26 @@
+# Push a tag like v1.1.0 and this builds the tool and attaches Weavefield.html and Weavefield.zip to a GitHub release,
+# so anyone can download the latest from
+#   https://github.com/<owner>/<repo>/releases/latest/download/Weavefield.html
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run build
+      - run: npm test
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/Weavefield.html dist/Weavefield.zip \
+            --title "Weavefield $GITHUB_REF_NAME" \
+            --notes "Download **Weavefield.html** and double-click it: it runs offline in any modern browser (Chrome, Edge, Firefox or Safari) on Windows, macOS, Linux or ChromeOS. **Weavefield.zip** has the same file with a README and the licences."

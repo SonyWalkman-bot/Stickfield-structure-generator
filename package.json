@@ -1,0 +1,21 @@
+{
+  "name": "weavefield",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Grow woven stick structures on a live physical model: rods that bend and settle under their own weight, lashings that can slip, a build order you can replay with physics, and a cut list to build from.",
+  "license": "MIT",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node test/run.js",
+    "test:smoke": "node test/pw_smoke.js",
+    "test:offline": "node test/pw_offline.js",
+    "test:browser": "node test/run-browser.js",
+    "fixture": "node test/make_fixture.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

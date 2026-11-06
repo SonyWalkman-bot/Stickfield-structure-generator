@@ -1,0 +1,45 @@
+# Builds Weavefield, runs the physics and model tests, then a browser smoke test and the offline-copy test, and keeps the
+# built tool (dist/Weavefield.html, dist/Weavefield.zip) as a download on every run.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Physics, model and growth tests
+        run: npm test
+      - name: Install Chromium for the browser tests
+        run: npx playwright install --with-deps chromium
+      - name: Browser smoke test
+        run: npm run test:smoke
+      - name: Offline copy test
+        run: npm run test:offline
+      - name: Keep the built tool
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weavefield-${{ github.sha }}
+          path: |
+            dist/Weavefield.html
+            dist/Weavefield.zip
+          if-no-files-found: ignore
+      - name: Keep screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ github.sha }}
+          path: test/out
+          if-no-files-found: ignore
