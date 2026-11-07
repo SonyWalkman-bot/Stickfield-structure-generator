@@ -71,7 +71,8 @@ npm run test:browser
 ```
 
 Every push builds the tool and runs the tests on GitHub Actions; the built `Weavefield.html` is attached to each run.
-Pushing a tag like `v1.1.0` publishes a release with it.
+Publishing a release on GitHub (for example `v1.1.0`) builds the tool and attaches `Weavefield.html` and
+`Weavefield.zip` to it.
 
 ## Contributing
 

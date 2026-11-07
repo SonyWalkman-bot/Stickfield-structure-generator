@@ -1,8 +1,11 @@
-# Push a tag like v1.1.0 and this builds the tool and attaches Weavefield.html and Weavefield.zip to a GitHub release,
-# so anyone can download the latest from
+# When a release is published on GitHub (Releases → Draft a new release → choose a tag such as v1.0.0 → Publish), this
+# builds the tool and attaches Weavefield.html and Weavefield.zip to it, so anyone can download the latest from
 #   https://github.com/<owner>/<repo>/releases/latest/download/Weavefield.html
+# Pushing a v* tag does the same.
 name: Release
 on:
+  release:
+    types: [published]
   push:
     tags: ['v*']
 permissions:
@@ -17,10 +20,14 @@ jobs:
           node-version: 22
       - run: npm run build
       - run: npm test
-      - name: Publish the release
+      - name: Attach the tool to the release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/Weavefield.html dist/Weavefield.zip \
-            --title "Weavefield $GITHUB_REF_NAME" \
-            --notes "Download **Weavefield.html** and double-click it: it runs offline in any modern browser (Chrome, Edge, Firefox or Safari) on Windows, macOS, Linux or ChromeOS. **Weavefield.zip** has the same file with a README and the licences."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/Weavefield.html dist/Weavefield.zip --clobber
+          else
+            gh release create "$TAG" dist/Weavefield.html dist/Weavefield.zip --title "Weavefield $TAG" \
+              --notes "Download **Weavefield.html** and double-click it: it runs offline in any modern browser (Chrome, Edge, Firefox or Safari) on Windows, macOS, Linux or ChromeOS. **Weavefield.zip** has the same file with a README and the licences."
+          fi
