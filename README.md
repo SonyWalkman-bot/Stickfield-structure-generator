@@ -2,6 +2,8 @@
 
 Grow woven stick structures on a live physical model.
 
+*This repository is named after Stickfield, the structure generator Weavefield grew out of.*
+
 Every rod in Weavefield is a chain of springs that bends and settles under its own weight. Every lashing is a spring
 that can slip. What you see is always the relaxed shape, and the stresses, lashing forces and ground reactions come
 from it. When the design works, export the cut list and lashing schedule and build it.

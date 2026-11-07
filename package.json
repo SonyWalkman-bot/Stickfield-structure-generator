@@ -4,6 +4,11 @@
   "private": true,
   "description": "Grow woven stick structures on a live physical model: rods that bend and settle under their own weight, lashings that can slip, a build order you can replay with physics, and a cut list to build from.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SonyWalkman-bot/Stickfield-structure-generator.git"
+  },
+  "homepage": "https://github.com/SonyWalkman-bot/Stickfield-structure-generator#readme",
   "scripts": {
     "build": "node build.js",
     "test": "node test/run.js",
