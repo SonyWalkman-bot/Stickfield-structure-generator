@@ -20,7 +20,7 @@ SF.Checks = (function () {
     const cap = m.material.joint_capacity_n; let maxTie = 0, maxTieId = null, over = 0, maxTieU = 0; const overIds = [];
     sim.jointIds.forEach((id, j) => { const f = sim.jointF[j], u = f / sim.jointCap[j]; if (f > maxTie) { maxTie = f; maxTieId = id; } if (u > maxTieU) maxTieU = u; if (u > 1) { over++; overIds.push(id); } });
     const overStock = Array.from(m.rods.values()).filter((r) => r.L > m.material.max_rod_m && r.kind !== 'pole').map((r) => r.id);
-    const overRods = []; sim.rods.forEach((r, k) => { if (r.kind === 'stick' && st.rodMax[k] > 1) overRods.push(r.id); });
+    const overRods = []; sim.rods.forEach((r, k) => { if ((r.kind === 'stick' || r.kind === 'clad') && st.rodMax[k] > 1) overRods.push(r.id); });
     return { rods: m.rods.size, sticks, members: m.rods.size - sticks, lashings: sim.jointIds.length, length: len, mass, kinds, cls, peak, peakRod, maxTie, maxTieId, maxTieU, overTies: over, overIds, overRods, cap, overStock, stress: st };
   }
 

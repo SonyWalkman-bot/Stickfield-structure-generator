@@ -164,13 +164,23 @@ SF.Basket = (function () {
   // bolt a ring, as it goes up, to every ring already standing that it crosses or passes within a bolt's reach of
   // (two bolts per pair, well apart). Rings that tip into each other are joined this way, as are baskets that overlap.
   function connectRing(m, rod, stage, others) {
-    const out = []; const na = rod.pts.length; const bb = boxOf(rod.pts, 0.1);
-    for (const B of m.rods.values()) {
-      if (B === rod || B.kind !== 'ring' || !B.bk || (!others && B.bk !== rod.bk)) continue; if (!overlaps(bb, boxOf(B.pts, 0.1))) continue;
+    const out = []; const na = rod.pts.length; const free = !!rod.fr; const reach = free ? 0.35 : 0.09; const bb = boxOf(rod.pts, reach);
+    for (const B of Array.from(m.rods.values())) {
+      if (B === rod || B.kind !== 'ring' || !B.bk || (!others && B.bk !== rod.bk)) continue; if (!overlaps(bb, boxOf(B.pts, 0.02))) continue;
       const nb = B.pts.length; const best = [];
-      for (let i = 0; i < na; i++) for (let j = 0; j < nb; j++) { const q = segSeg(rod.pts[i], rod.pts[(i + 1) % na], B.pts[j], B.pts[(j + 1) % nb]); if (q.d < 0.09) best.push({ i, j, s: q.s, t: q.t, d: q.d }); }
+      for (let i = 0; i < na; i++) for (let j = 0; j < nb; j++) { const q = segSeg(rod.pts[i], rod.pts[(i + 1) % na], B.pts[j], B.pts[(j + 1) % nb]); if (q.d < reach) best.push({ i, j, s: q.s, t: q.t, d: q.d }); }
       best.sort((x, y) => x.d - y.d); const used = [];
-      for (const t of best) { if (used.some((u) => { const di = Math.abs(u.i - t.i); return Math.min(di, na - di) < 3; })) continue; used.push(t); out.push(Mo.addJoint(m, rod.id, t.i, B.id, t.j, stage, Object.assign({ type: 'bolt' }, t.s > 0.001 ? { ta: Math.round(t.s * 1000) / 1000 } : {}, t.t > 0.001 ? { tb: Math.round(t.t * 1000) / 1000 } : {}))); if (used.length >= 2) break; }
+      for (const t of best) {
+        if (used.some((u) => { const di = Math.abs(u.i - t.i); return Math.min(di, na - di) < 3; })) continue; used.push(t);
+        const ta = t.s > 0.001 ? { ta: Math.round(t.s * 1000) / 1000 } : {}, tb = t.t > 0.001 ? { tb: Math.round(t.t * 1000) / 1000 } : {};
+        if (t.d < 0.12) out.push(Mo.addJoint(m, rod.id, t.i, B.id, t.j, stage, Object.assign({ type: 'bolt' }, ta, tb)));
+        else { // a free ring passing near another: a short block between them, bolted to each
+          const pa = M.lerp3(rod.pts[t.i], rod.pts[(t.i + 1) % na], t.s), pb = M.lerp3(B.pts[t.j], B.pts[(t.j + 1) % nb], t.t);
+          const blk = Mo.makeRod(m, 'brace', Mo.resample([pa, pb], 6, false), t.d, stage, false, { profile: 'stick', cls: 'straight' }); blk.bk = rod.bk; blk.part = 'block'; blk.fr = undefined;
+          out.push(Mo.addJoint(m, blk.id, 0, rod.id, t.i, stage, Object.assign({ type: 'bolt' }, t.s > 0.001 ? { tb: Math.round(t.s * 1000) / 1000 } : {})), Mo.addJoint(m, blk.id, 5, B.id, t.j, stage, Object.assign({ type: 'bolt' }, tb)));
+        }
+        if (used.length >= 2) break;
+      }
     }
     return out;
   }
@@ -259,11 +269,143 @@ SF.Basket = (function () {
     });
     return out;
   }
+  // ---------------------------------------------------------------- free rings: placed one by one, any way up
+  // a free ring: centre c, round C, its normal tipped tilt° from straight up towards az° (90 stands it on edge)
+  function netOpts() { return { clad: true, density: 6, len: 1.9, spin: 0.4, hug: 0.8, reach: 0.4, seed: 5 }; }
+  function freeRing(f) {
+    const t = (f.tilt || 0) * DEG, a = (f.az || 0) * DEG; const n = [Math.sin(t) * Math.cos(a), Math.cos(t), Math.sin(t) * Math.sin(a)]; const C = clampC(f.C || 4.4); const c = (f.c || [0, 1, 0]).slice();
+    const reach = C / TAU * Math.sqrt(Math.max(0, 1 - n[1] * n[1])); const grounded = c[1] - reach < 0.12; if (grounded) c[1] = reach + 0.02;
+    return { k: 0, c, C, n, grounded, flat: Math.abs(n[1]) > 0.94 };
+  }
+  // one free ring into the model: on its formwork (unless it lies flat on the ground), pegged where it meets the ground,
+  // bolted wherever it crosses a ring already up
+  function buildFree(m, f, stage) {
+    const r = freeRing(f); const n = Math.max(24, Mo.segCount(r.C, m.material)); const pts = Array.from({ length: n }, (_, i) => ringPoint(r, TAU * i / n));
+    const rod = Mo.makeRod(m, 'ring', pts, r.C, stage, true, { profile: 'ring', held: !(r.grounded && r.flat), cls: 'soak' }); rod.bk = 'net'; rod.fr = f.id; rod.part = 'ring';
+    if (r.grounded) { let lo = 0; rod.pts.forEach((p, i) => { if (p[1] < rod.pts[lo][1]) lo = i; }); const feet = r.flat ? [0, 1, 2, 3].map((q) => Math.round(q * n / 4) % n) : [(lo - 1 + n) % n, lo, (lo + 1) % n]; rod.fix = feet.map((i) => ({ i, p: [rod.pts[i][0], Math.max(0.01, rod.pts[i][1]), rod.pts[i][2]] })); }
+    connectRing(m, rod, stage, true); return rod;
+  }
+  // a run of rings swept from a to b: the path can arch up (lift) or coil round its line (coil), the rings stand across
+  // the path (tip 0) or lie along it (tip 90), turn round it by twist° from end to end, and swell, taper or pulse in size
+  function sweep(a, b, o, ids) {
+    o = Object.assign({ count: 7, lift: 0.8, coil: 0, turns: 1, tip: 70, twist: 180, size: 'swell', C: 4.4, roll: 0 }, o || {}); const out = []; const n = Math.max(2, Math.min(24, Math.round(o.count)));
+    const ab = M.sub(b, a); const Lh = Math.max(0.1, M.len(ab)); const T0 = M.norm(ab); const side = M.norm(M.cross(T0, Math.abs(T0[1]) > 0.95 ? [1, 0, 0] : [0, 1, 0])); const upv = M.norm(M.cross(side, T0));
+    const path = (s) => { const base = M.add(a, M.mul(ab, s)); const lift = M.mul(upv, 4 * o.lift * s * (1 - s)); const ang = TAU * o.turns * s; const coil = M.add(M.mul(side, o.coil * Math.cos(ang)), M.mul(upv, o.coil * Math.sin(ang))); return M.add(base, M.add(lift, coil)); };
+    for (let i = 0; i < n; i++) {
+      const s = n > 1 ? i / (n - 1) : 0.5; const p = path(s); const T = M.norm(M.sub(path(Math.min(1, s + 0.01)), path(Math.max(0, s - 0.01))));
+      const S = M.norm(M.cross(T, [0, 1, 0])); const U = M.norm(M.cross(S, T)); const psi = ((o.roll || 0) + (o.twist || 0) * s) * DEG; const tip = (o.tip || 0) * DEG;
+      const nrm = M.norm(M.add(M.mul(T, Math.cos(tip)), M.mul(M.add(M.mul(S, Math.cos(psi)), M.mul(U, Math.sin(psi))), Math.sin(tip))));
+      let C = o.C; if (o.size === 'swell') C = o.C + 0.8 * Math.sin(Math.PI * s) - 0.4; else if (o.size === 'taper') C = o.C + 0.6 - 1.2 * s; else if (o.size === 'pulse') C = o.C + (i % 2 ? -0.5 : 0.4);
+      const v = nrm[1] < 0 ? M.mul(nrm, -1) : nrm; const tilt = Math.acos(M.clamp(v[1], -1, 1)) / DEG; const az = Math.atan2(v[2], v[0]) / DEG;
+      out.push({ id: ids ? ids() : 'F' + (i + 1), c: p.map((x) => Math.round(x * 1000) / 1000), C: Math.round(clampC(C) * 100) / 100, tilt: Math.round(tilt * 10) / 10, az: Math.round(az * 10) / 10 });
+    }
+    return out;
+  }
+  // whole-set moves for free rings: copies round a centre, a mirror, a twist that grows with height, a shake, a resize
+  function ringOps(list, op, o, nextId) {
+    o = o || {}; const L0 = list.map((f) => JSON.parse(JSON.stringify(f))); if (!L0.length) return L0; const cx = L0.reduce((a, f) => a + f.c[0], 0) / L0.length, cz = L0.reduce((a, f) => a + f.c[2], 0) / L0.length;
+    const rot = (f, deg, y) => { const a = deg * DEG; const x = f.c[0] - cx, z = f.c[2] - cz; f.c[0] = Math.round((cx + x * Math.cos(a) - z * Math.sin(a)) * 1000) / 1000; f.c[2] = Math.round((cz + x * Math.sin(a) + z * Math.cos(a)) * 1000) / 1000; f.az = ((f.az || 0) + deg) % 360; void y; return f; };
+    if (op === 'array') { const k = Math.max(2, Math.min(8, o.count || 3)); const out = L0.slice(); for (let j = 1; j < k; j++) for (const f of L0) out.push(Object.assign(rot(JSON.parse(JSON.stringify(f)), 360 * j / k), { id: nextId() })); return out; }
+    if (op === 'mirror') { const out = L0.slice(); for (const f of L0) { const g = JSON.parse(JSON.stringify(f)); g.id = nextId(); g.c[0] = Math.round((2 * cx - f.c[0] + (o.gap || 0)) * 1000) / 1000; g.az = 180 - (f.az || 0); out.push(g); } return out; }
+    if (op === 'twist') { const ys = L0.map((f) => f.c[1]); const y0 = Math.min(...ys), y1 = Math.max(...ys); return L0.map((f) => rot(f, (o.deg || 45) * (y1 > y0 ? (f.c[1] - y0) / (y1 - y0) : 0))); }
+    if (op === 'shake') { const rnd = M.rng(o.seed || 7); return L0.map((f) => Object.assign(f, { tilt: M.clamp((f.tilt || 0) + (rnd() - 0.5) * 2 * (o.deg || 15), 0, 180), az: (f.az || 0) + (rnd() - 0.5) * 4 * (o.deg || 15), c: [f.c[0] + (rnd() - 0.5) * 0.3, f.c[1] + (rnd() - 0.5) * 0.2, f.c[2] + (rnd() - 0.5) * 0.3].map((v) => Math.round(v * 1000) / 1000) })); }
+    if (op === 'size') return L0.map((f) => Object.assign(f, { C: Math.round(clampC((f.C || 4.4) + (o.dC || 0.2)) * 100) / 100 }));
+    return L0;
+  }
+  // what a person with a ladder, bolts and clamps can and can't do with the free rings
+  function freeChecks(m) {
+    const out = []; const rings = Array.from(m.rods.values()).filter((r) => r.fr); const defs = new Map((m.meta.free || []).map((f) => [f.id, f]));
+    for (const r of rings) {
+      const f = defs.get(r.fr); const g = f ? freeRing(f) : null; const P = g ? Array.from({ length: 24 }, (_, i) => ringPoint(g, TAU * i / 24)) : r.pts;
+      const bolts = m.joints.filter((j) => (j.a === r.id || j.b === r.id) && j.type === 'bolt').length; const top = Math.max(...P.map((p) => p[1])); const low = Math.min(...P.map((p) => p[1]));
+      if (low > 0.05 && bolts < 2) out.push({ id: r.id, level: 'crit', text: r.fr + ' floats: it is bolted ' + (bolts ? 'at only one place' : 'to nothing') + '. Move it into or beside another ring (within 35 cm), or set it on the ground' });
+      else if (low > 0.05 && bolts < 3) out.push({ id: r.id, level: 'warn', text: r.fr + ' hangs on two bolts: it can swing about them until something else holds it' });
+      if (top > 3.6) out.push({ id: r.id, level: 'warn', text: r.fr + ' reaches ' + top.toFixed(1) + ' m: bolting it needs a scaffold tower, not a ladder' });
+      else if (top > 2.4) out.push({ id: r.id, level: 'info', text: r.fr + ' reaches ' + top.toFixed(1) + ' m: bolt it from a ladder' });
+    }
+    // bolts where two rings cross at a glancing angle are hard to drill through: they need a block between
+    for (const j of m.joints) { if (j.type !== 'bolt') continue; const A = m.rods.get(j.a), B2 = m.rods.get(j.b); if (!A || !B2 || A.kind !== 'ring' || B2.kind !== 'ring' || !(A.fr || B2.fr)) continue;
+      const ta = Mo.tangentAt(A, j.ia), tb = Mo.tangentAt(B2, j.ib); const ang = Math.acos(Math.min(1, Math.abs(M.dot(ta, tb)))) / DEG; if (ang < 15) out.push({ id: A.fr ? A.id : B2.id, level: 'warn', text: 'rings cross at only ' + ang.toFixed(0) + '° at ' + j.id + ': bolt through a block between them' }); }
+    return out;
+  }
+  // cladding grown over the free rings: each stick starts beside a ring and follows the rings' flow, running along the
+  // nearest rings, spinning round them (spin) and held close to them (hug), lashed wherever it passes a rod
+  function cladNet(m, o, stage) {
+    const mat = m.material; const rnd = M.rng((o.seed || 5) * 7907 + 3); const out = [];
+    const rings = Array.from(m.rods.values()).filter((r) => r.kind === 'ring').map((r) => { const n = r.pts.length; const c = r.pts.reduce((a, p) => M.add(a, p), [0, 0, 0]).map((v) => v / n); let nv = [0, 0, 0]; for (let i = 0; i < n; i++) nv = M.add(nv, M.cross(M.sub(r.pts[i], c), M.sub(r.pts[(i + 1) % n], c))); nv = M.norm(nv); const R = r.pts.reduce((a, p) => a + M.dist(p, c), 0) / n; return { r, c, n: nv, R }; });
+    if (!rings.length) return out;
+    const near = (p) => rings.map((g) => { const q0 = M.sub(p, g.c); const q = M.sub(q0, M.mul(g.n, M.dot(q0, g.n))); const lq = M.len(q); const dir = lq > 1e-6 ? M.mul(q, 1 / lq) : perp(g.n); const np = M.add(g.c, M.mul(dir, g.R)); return { g, np, d: M.dist(p, np), t: M.norm(M.cross(g.n, dir)) }; });
+    const cs = 0.35; const grid = new Map(); const key = (x, y, z) => x + ',' + y + ',' + z;
+    for (const r of m.rods.values()) { if (r.kind === 'clad') continue; const n = r.pts.length; const segs = r.closed ? n : n - 1; for (let j = 0; j < segs; j++) { const a = r.pts[j], c = r.pts[(j + 1) % n]; const g = key(...M.lerp3(a, c, 0.5).map((v) => Math.floor(v / cs))); let l = grid.get(g); if (!l) grid.set(g, l = []); l.push({ r, j, a, c }); } }
+    const total = rings.reduce((a, g) => a + TAU * g.R, 0); const count = Math.max(8, Math.round((o.density || 6) * total * 0.5)); const sig = 0.45;
+    const cl = SF.Phys.sectionOf(mat, { profile: 'clad' }).c1 * 1.15; const el = mat.elastic_strain || 0.004;
+    for (let q = 0; q < count; q++) {
+      const g0 = rings[Math.floor(rnd() * rings.length)]; const th = TAU * rnd(); const { u, w } = basis(g0.n); const radial = M.add(M.mul(u, Math.cos(th)), M.mul(w, Math.sin(th)));
+      const off = M.add(M.mul(radial, (rnd() - 0.5) * 0.08), M.mul(g0.n, (rnd() - 0.5) * 0.08)); let p = M.add(M.add(g0.c, M.mul(radial, g0.R)), off); if (p[1] < 0.05) continue;
+      let d = M.mul(M.norm(M.cross(g0.n, radial)), rnd() < 0.5 ? 1 : -1); const L = (o.len || 2.6) * (0.6 + 0.8 * rnd()); const P = [p]; const hand = rnd() < 0.5 ? 1 : -1;
+      for (let s = 0; s < L; s += 0.08) {
+        let f = [0, 0, 0], wsum = 0, best = null;
+        for (const h of near(p)) { const wgt = Math.exp(-((h.d / sig) ** 2)); if (!best || h.d < best.d) best = h; if (wgt < 1e-3) continue; let t = h.t; if (M.dot(t, d) < 0) t = M.mul(t, -1); const rr = M.sub(p, h.np); const rl = M.len(rr); const spinv = rl > 1e-6 ? M.norm(M.cross(t, M.mul(rr, 1 / rl))) : [0, 0, 0]; f = M.add(f, M.mul(M.add(t, M.mul(spinv, hand * (o.spin || 0))), wgt)); wsum += wgt; }
+        if (wsum < 0.02) break;
+        d = M.norm(M.add(M.mul(d, 0.7), M.mul(M.norm(f), 0.3))); p = M.add(p, M.mul(d, 0.08));
+        // held close to the nearest ring: drawn back towards it (hug), less the further the spin carries it
+        const nb = near(p).reduce((x, y) => (y.d < x.d ? y : x)); if (nb.d < 0.45) p = M.add(p, M.mul(M.sub(nb.np, p), 0.25 * (o.hug == null ? 0.5 : o.hug)));
+        if (p[1] < 0.03) break; P.push(p);
+      }
+      // the end runs on straight
+      if (P.length > 3 && (o.reach || 0) > 0) { const e = M.add(P[P.length - 1], M.mul(d, (o.reach || 0) * rnd())); if (e[1] > 0.03) P.push(e); }
+      if (P.length < 6) continue;
+      for (let it = 0; it < 12; it++) for (let i = 1; i < P.length - 1; i++) P[i] = M.lerp3(P[i], M.lerp3(P[i - 1], P[i + 1], 0.5), 0.5);
+      const Lp = Mo.polyLen(P, false); const nn = Mo.segCount(Lp, mat) + 1; const pts = Mo.resample(P, nn, false);
+      const cand = [];
+      for (let i = 0; i < nn - 1; i++) { const ci = M.lerp3(pts[i], pts[i + 1], 0.5).map((v) => Math.floor(v / cs));
+        for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) for (const sg of grid.get(key(ci[0] + x, ci[1] + y, ci[2] + z)) || []) { const g = segSeg(pts[i], pts[i + 1], sg.a, sg.c); if (g.d < 0.11) cand.push({ i, s: g.s, rod: sg.r.id, j: sg.j, t: g.t, d: g.d, at: (i + g.s) * Lp / (nn - 1) }); } }
+      cand.sort((x, y) => x.d - y.d); const ties = []; for (const c of cand) { if (ties.some((t) => Math.abs(t.at - c.at) < 0.35)) continue; ties.push(c); if (ties.length >= 6) break; }
+      if (o.why) o.why.n = (o.why.n || 0) + 1;
+      // the stick is laid onto the rods it is lashed to (the gap closed smoothly along it), so the lashings start slack
+      if (ties.length >= 3) { const sh = pts.map(() => [0, 0, 0]); const wsum = pts.map(() => 0); const step = Lp / (nn - 1);
+        for (const t of ties) { const sg = grid.get(key(...M.lerp3(pts[t.i], pts[t.i + 1], 0.5).map((v) => Math.floor(v / cs)))); void sg; const R0 = m.rods.get(t.rod); const n0 = R0.pts.length; const tgt = M.lerp3(R0.pts[t.j], R0.pts[(t.j + 1) % n0], t.t); const cur = M.lerp3(pts[t.i], pts[t.i + 1], t.s); const dlt = M.sub(tgt, cur);
+          pts.forEach((q, i) => { const w = Math.exp(-(((i - t.i - t.s) * step / 0.45) ** 2)); sh[i] = M.add(sh[i], M.mul(dlt, w)); wsum[i] += w; }); }
+        for (let i = 0; i < nn; i++) if (wsum[i] > 0) pts[i] = M.add(pts[i], M.mul(sh[i], 1 / Math.max(1, wsum[i]))); }
+      const strain = maxCurv(pts) * cl; const A0 = pts[0], B0 = pts[nn - 1]; const ab = M.sub(B0, A0); const sag = Math.max(...pts.map((v) => { const t = M.clamp(M.dot(M.sub(v, A0), ab) / Math.max(1e-9, M.dot(ab, ab)), 0, 1); return M.dist(v, M.add(A0, M.mul(ab, t))); }));
+      const soak = strain > 0.5 * el && sag > 0.04; if (!soak && strain > 0.5 * el) { if (o.why) o.why.kink = (o.why.kink || 0) + 1; continue; } if (ties.length < (soak ? 4 : 3) || (soak && Lp < 1.3)) { if (o.why) o.why.ties = (o.why.ties || 0) + 1; continue; }
+      if (strain > (mat.soak_strain || 0.017)) { if (o.why) o.why.tight = (o.why.tight || 0) + 1; continue; } // tighter than a soaked thin stick goes
+      const rod = Mo.makeRod(m, 'clad', pts, Lp, stage, false, Object.assign({ profile: 'clad', cls: soak ? 'soak' : 'cold' }, soak ? { rest: pts } : {})); rod.bk = 'net'; rod.part = 'clad'; out.push(rod);
+      for (const t of ties) Mo.addJoint(m, rod.id, t.i, t.rod, t.j, stage, Object.assign({}, t.s > 0.001 ? { ta: Math.round(t.s * 1000) / 1000 } : {}, t.t > 0.001 ? { tb: Math.round(t.t * 1000) / 1000 } : {}));
+    }
+    if (out.length) Mo.autoJoin(m, out.map((r) => r.id), { radius: 0.06, perRod: 3, spacing: 0.6, perPair: 1 }, stage);
+    return out;
+  }
+  // let the structure settle under its weight before cladding goes on, so the cladding is laid on it as it stands
+  // (it is fitted to the sagged rings, not the drawn ones); a time budget keeps edits quick
+  function settle(m, ms) {
+    if (typeof SF.Phys === 'undefined' || !m.rods.size) return; const sim = SF.Phys.build(m); SF.Phys.relax(sim, { budgetMs: ms });
+    for (const r of m.rods.values()) { const e = sim.index.get(r.id); if (!e) continue; r.pts = r.pts.map((_, i) => { const o = 3 * (e.off + i); return [sim.X[o], sim.X[o + 1], sim.X[o + 2]].map((v) => Math.round(v * 1000) / 1000); }); }
+  }
+  function perp(n) { return M.norm(M.cross(n, Math.abs(n[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])); }
+  // free-ring layouts: a looping tunnel of rings that twist as they go, and a canopy of crossing loops
+  function loopTunnel() { let k = 0; const id = () => 'F' + (++k); return sweep([-3, 0.7, 0], [3, 0.7, 0], { count: 14, lift: 0.5, coil: 0.2, turns: 1, tip: 80, twist: 240, size: 'swell', C: 4.4 }, id); }
+  function canopy() { let k = 0; const id = () => 'F' + (++k); return sweep([-2.6, 0.6, -1.4], [2.4, 0.6, 1.2], { count: 8, lift: 1.4, coil: 0, tip: 80, twist: 160, size: 'swell', C: 4.6 }, id).concat(sweep([-2.2, 0.6, 1.8], [2.2, 0.6, -1.6], { count: 7, lift: 1.2, coil: 0.3, tip: 65, twist: -180, size: 'pulse', C: 4.2 }, id)); }
+  const FREE_LAYOUTS = [['tunnel', 'Looping tunnel: rings swept along an arch, twisting', loopTunnel], ['canopy', 'Canopy: two sweeps of rings crossing', canopy]];
   // the whole pile: every basket in order, each built and struck, then bolted together; then the cladding goes on
-  function buildAll(m, baskets, o, s) {
-    clear(m); const bs = (baskets || []).map((b) => Object.assign({}, b)); m.meta.baskets = JSON.parse(JSON.stringify(bs)); o = Object.assign(opts(), o || {}); let stage = s; const out = [];
+  function buildAll(m, baskets, o, s, free) {
+    free = (free || m.meta.free || []).map((f) => Object.assign({}, f)); const net = Object.assign(netOpts(), m.meta.net || {}, o && o.net);
+    clear(m); const bs = (baskets || []).map((b) => Object.assign({}, b)); m.meta.baskets = JSON.parse(JSON.stringify(bs)); m.meta.free = JSON.parse(JSON.stringify(free)); m.meta.net = net; o = Object.assign(opts(), o || {}); let stage = s; const out = [];
     bs.forEach((b, i) => { if (i > 0) stage = Mo.nextStage(m); out.push(...build(m, Object.assign(b, { strike: o.strike, ties: o.ties }), stage)); stage = m.meta.stage; });
     if (o.strike === 'end') { stage = Mo.nextStage(m); Mo.release(m, stage, new Set(out.map((r) => r.id))); }
+    // free rings, one at a time on their formwork, each bolted to whatever it crosses; then the formwork comes out
+    if (free.length) {
+      const fr = []; for (const f of free) { if (out.length || fr.length) stage = Mo.nextStage(m); fr.push(buildFree(m, f, stage)); }
+      stage = Mo.nextStage(m); Mo.release(m, stage, new Set(fr.map((r) => r.id))); out.push(...fr);
+      if (net.clad) {
+        settle(m, 700); stage = Mo.nextStage(m); const cn = cladNet(m, net, stage); stage = m.meta.stage;
+        // sticks the settled structure would overload are left off (they would crack as the rings take their weight)
+        const sim = SF.Phys.build(m); SF.Phys.relax(sim, { budgetMs: 900 }); const st = SF.Phys.stress(sim); const gone = [];
+        sim.rods.forEach((r, k) => { if (r.kind === 'clad' && r.bk === 'net' && st.rodMax[k] > 0.95) gone.push(r.id); }); if (gone.length) Mo.remove(m, gone);
+        const g = new Set(gone); out.push(...cn.filter((r) => !g.has(r.id)));
+      }
+    }
+    if (bs.some((b) => b.clad)) settle(m, 500);
     // cladding, basket by basket, on the standing pile; where cladding sticks cross each other or a neighbour, lashed
     const cl = []; for (const b of bs) if (b.clad) { stage = Mo.nextStage(m); const r = clad(m, b, o, stage); cl.push(...r); out.push(...r); stage = m.meta.stage; }
     if (cl.length) Mo.autoJoin(m, cl.map((r) => r.id), { radius: 0.06, perRod: 3, spacing: 0.6, perPair: 1 }, stage);
@@ -408,5 +550,5 @@ SF.Basket = (function () {
     circles.forEach((c, i) => { const b = make(temp, (c.x - cx) * mpp, (c.y - cy) * mpp, clampC(TAU * c.r * mpp)); b.id = 'B' + (i + 1); b.seed = 3 + i; temp.baskets.push(b); bs.push(b); });
     return { baskets: bs, mpp, cx, cy };
   }
-  return { LIMITS, SHAPES, BRACES, TILTS, CLAD_DIRS, LAYOUTS, connectRing, surf, notebook, clad, stock, opts, rings, ringPoint, build, buildAll, tie, clear, make, pile, materials, issues, findCircles, fromCircles, clampC };
+  return { LIMITS, SHAPES, BRACES, TILTS, CLAD_DIRS, LAYOUTS, FREE_LAYOUTS, netOpts, freeRing, buildFree, sweep, ringOps, freeChecks, cladNet, connectRing, surf, notebook, clad, stock, opts, rings, ringPoint, build, buildAll, tie, clear, make, pile, materials, issues, findCircles, fromCircles, clampC };
 })();

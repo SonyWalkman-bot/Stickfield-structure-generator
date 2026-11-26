@@ -15,6 +15,10 @@ const { setup, SHOTS, tally } = require('./pw');
   const st = await page.evaluate(() => { WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); return WF.W.model.meta.baskets.find((b) => b.id === 'B4').rings; });
   t.ok(st === nb[2].length + 1, 'clicking a basket stacks another ring on it (' + st + ' rings)');
   await page.evaluate(() => { WF.undo(); WF.undo(); WF.setTool('select'); });
+  // free rings: one placed on the ground, then a sweep of them
+  const fr = await page.evaluate(() => { const n0 = (WF.W.model.meta.free || []).length; WF.setTool('free'); WF.freeClick('free', { kind: 'ground', p: [5, 0, 3] }); const n1 = WF.W.model.meta.free.length; WF.setTool('sweep'); WF.freeClick('sweep', { kind: 'ground', p: [4, 0, -4] }); WF.freeClick('sweep', { kind: 'ground', p: [8, 0, -4] }); const n2 = WF.W.model.meta.free.length; WF.setTool('select'); return [n0, n1, n2]; });
+  t.ok(fr[1] === fr[0] + 1 && fr[2] > fr[1] + 2, 'Free ring and Ring sweep tools add rings ' + JSON.stringify(fr));
+  await page.evaluate(() => { WF.undo(); WF.undo(); });
   // Remove all, then undo
   await page.click('#clearBtn'); await page.click('#dialog .primary, #dialog button.danger'); await page.waitForTimeout(300);
   const ra = await page.evaluate(() => WF.W.model.rods.size); t.ok(ra === 0, 'Remove all empties the design');

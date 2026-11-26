@@ -29,7 +29,10 @@ Everything is in that one file, so you can share it by email, a shared drive or 
   tip or move it on its own.
 - **Brace the rings.** Lattice, diagonal, stake or spiral bracing, with tops that run up past the last ring and
   doorways left open. Every basket can lean, taper, flare or bulge; pick a ring to change its basket.
-- **Clad it.** Cover the baskets in thin sticks that follow their shape (along the rings, with the twist, rising like
+- **Free rings.** Place rings one by one any way up: standing on the ground, hung through other rings, or swept in
+  runs that arch, coil and twist. Copy them round, mirror, twist or shake the whole set. Each ring is bolted where it
+  crosses another, and Weavefield says what a small crew with ladders, bolts and clamps can't do.
+- **Clad it.** Grow thin sticks over free rings, following and spinning round them, or cover the baskets in sticks that follow their shape (along the rings, with the twist, rising like
   a flame, or flowing from one to the other), lashed where they cross the rings, their ends
   running on past the baskets.
 - **Build it step by step.** Each ring goes up on its formwork and is braced before the next; then the formwork comes

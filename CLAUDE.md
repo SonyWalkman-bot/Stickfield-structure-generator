@@ -52,6 +52,7 @@ There is no bundler and there are no imports. `build.js` concatenates `src/*.js`
 | `93_timeline.js` | | build-order bar: scrub, play, check every stage |
 | `94_files.js` | | Files drawer, offline copy, saved versions, opening designs (Stickfield too), help, confirm dialog |
 | `95_baskets.js` | | the Basket tool, the Baskets panel (sketch underlay, ring finding, defaults, stock), the basket editor in the selection |
+| `96_free.js` | | the Free ring and Ring sweep tools, the Free rings panel (layouts, whole-set moves, flow cladding, crew checks), the free-ring editor |
 | `template.html` | | markup and all CSS, including the light and dark design tokens |
 
 The Node tests load modules 00 to 60 with `test/load.js`, so everything up to `SF.Checks` must run without a DOM.
@@ -165,6 +166,15 @@ The material limits come from the bending tests and are in `SF.Basket.LIMITS`; k
   thin sticks in stock.
 - Layouts live in `SF.Basket.LAYOUTS`; `swirl` (a twisting, clad tower) is the first visit. `test/t_baskets.js` checks
   every layout settles inside its strength with nothing bent beyond the tested limits.
+- Free rings (`meta.free`: `{ id, c, C, tilt, az }`, rods tagged `bk: 'net'` and `fr`) are placed any way up, after
+  the baskets, one stage each on formwork. A ring that reaches the ground is pegged there. Each is bolted where it
+  crosses a ring, or joined by a short bolted block (`part: 'block'`) where it passes within 0.35 m. `sweep` makes runs
+  of them along an arching or coiling path, `ringOps` copies, mirrors, twists, shakes or resizes them all, and
+  `freeChecks` says what a small crew can't do: floating rings, rings on two bolts, ladder or scaffold heights, and
+  glancing crossings.
+- Flow cladding over free rings (`cladNet`) follows the rings' tangent field, spins round them and is drawn back to
+  them. Cladding is laid on the settled structure (`settle` relaxes it first), and net cladding the settled structure
+  would overload (over 95%) is left off.
 - `findCircles` is a plain Hough transform on a greyscale array; it runs in Node, so test it there.
 
 ## Growth (`40_grow.js`, from Stickfield)

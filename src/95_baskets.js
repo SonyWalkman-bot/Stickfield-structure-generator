@@ -28,7 +28,7 @@
     if (!app.W.model.rods.size) { app.toast('There is nothing to remove'); return; }
     if (!(await app.confirm({ title: 'Remove everything?', text: 'Every basket, rod and lashing goes. Undo brings it all back.', ok: 'Remove all', danger: true }))) return;
     if (app.W.grow && app.stopGrowth) app.stopGrowth(); app.clearSel();
-    app.edit('Everything removed', (m) => { Mo.remove(m, Array.from(m.rods.keys()), []); m.meta.events = []; m.meta.baskets = []; app.design.formworkEls = []; }); app.updateEmpty();
+    app.edit('Everything removed', (m) => { Mo.remove(m, Array.from(m.rods.keys()), []); m.meta.events = []; m.meta.baskets = []; m.meta.free = []; app.design.formworkEls = []; }); app.updateEmpty();
   };
   app.placePile = function (quiet) { return app.rebuildBaskets(quiet ? null : 'A pile of seven baskets, built ring by ring', (bs) => { bs.length = 0; bs.push(...B.pile(app.design)); }, quiet ? { toast: false } : {}); };
 

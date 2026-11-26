@@ -42,6 +42,20 @@ for (const [id, , fn] of B.LAYOUTS) {
   const r3 = PH.relax(W3.sim, { budgetMs: 20000 }); W3.settled = r3.settled; W3.sync(); const S3 = SF.Checks.summary(W3);
   ok(r3.settled && S3.peak < 1.05 && B.issues(W3.model).every((x) => x.level !== 'crit'), id + ': ' + rings.length + ' rings, ' + ringBolts + ' ring-to-ring bolts, settles, peak ' + (S3.peak * 100).toFixed(0) + '%');
 }
+// free rings: swept and placed any way up, bolted where they cross or blocked where they pass close, cladding grown
+// over them along their flow; the rings themselves stand inside their strength
+for (const [id, , fn] of B.FREE_LAYOUTS) {
+  const W4 = SF.World.create(SF.Defaults.design(), SF.Defaults.params()); W4.edit((m, s) => B.buildAll(m, [], null, s, fn()));
+  const rs = Array.from(W4.model.rods.values()); const rings = rs.filter((r) => r.fr); const clad = rs.filter((r) => r.kind === 'clad');
+  const r4 = PH.relax(W4.sim, { budgetMs: 20000 }); const st = PH.stress(W4.sim); let ringPeak = 0; W4.sim.rods.forEach((r, k) => { if (r.kind === 'ring') ringPeak = Math.max(ringPeak, st.rodMax[k]); });
+  ok(r4.settled && rings.every((r) => r.L >= B.LIMITS.cMin - 1e-6 && r.L <= B.LIMITS.cMax + 1e-6) && clad.length > 20 && ringPeak < 1, id + ': ' + rings.length + ' free rings, ' + clad.length + ' cladding sticks, settles, rings at ' + (ringPeak * 100).toFixed(0) + '%');
+  ok(B.freeChecks(W4.model).every((x) => x.level !== 'crit'), id + ': no free ring left floating');
+}
+{
+  let k = 0; const id = () => 'F' + (++k); const s = B.sweep([0, 1, 0], [4, 1, 0], { count: 6, tip: 80, twist: 360 }, id);
+  ok(s.length === 6 && s.every((f) => f.C >= 3.7 && f.C <= 5.0), 'a sweep makes 6 rings inside the sizes that bend');
+  const arr = B.ringOps(s, 'array', { count: 3 }, id); ok(arr.length === 18 && new Set(arr.map((f) => f.id)).size === 18, 'copied round three times: 18 rings, each its own id');
+}
 // one ring moved on its own: only that ring changes size
 {
   const bs = B.LAYOUTS[0][2]({}); const before = B.rings(bs[0]).map((r) => r.C); bs[0].ringEdits = { 3: { dC: -1.0, tilt: 35 } }; const after = B.rings(bs[0]);

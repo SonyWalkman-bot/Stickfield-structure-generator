@@ -33,6 +33,8 @@
     view: { color: 'stress', thickness: 1.5, ties: true, flow: false, flowFam: 'all', section: null, secPos: 0, secFlip: false, ortho: false, budget: 9 },
     opt: {
       ring: { C: 4.4 },
+      free: { C: 4.4, tip: 90, facing: 'me', az: 0 },
+      sweep: { count: 7, lift: 0.8, coil: 0.2, turns: 1, tip: 70, twist: 180, size: 'swell', C: 4.4 },
       arch: { profile: 'frame', bundle: 1, lenMode: 'slack', slack: 1.45, length: 8, socket: 'tangent' },
       loop: { profile: 'weave', bundle: 1, length: 5, feet: 0.4, tilt: 0 },
       hoop: { profile: 'weave', bundle: 1, length: 6, plane: 'ring', attach: 0.25 },
