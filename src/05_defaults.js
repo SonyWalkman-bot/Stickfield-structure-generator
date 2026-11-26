@@ -15,7 +15,9 @@ SF.Defaults = (function () {
     frame: { label: 'Frame member · steam-bent', section_mm: 40, steam: true, timber: true },
     stick: { label: 'Stick · bent cold', section_mm: 20, timber: true },
     weave: { label: 'Weave · rattan', section_mm: 10, E_gpa: 6, strength_mpa: 55, density: 550 },
-    pole: { label: 'Ground pole · staked', section_mm: 70, timber: true, staked: true }
+    pole: { label: 'Ground pole · staked', section_mm: 70, timber: true, staked: true },
+    // a ring: one 18-20 mm pole soaked and bent round a formwork; it keeps the shape it was bent to
+    ring: { label: 'Ring · soaked pole', section_mm: 20, steam: true, timber: true }
   };
   // allowable bearing (kPa), friction, peg pull-out and sideways capacity (N)
   const SOILS = [
@@ -27,7 +29,7 @@ SF.Defaults = (function () {
     return {
       material: {
         species: 'sissoo', strength_factor: 0.6, bundle_action: 0.5, gravity: 1,
-        joint_stiffness: 20000, joint_capacity_n: 600, joint_rot: 15, slip_factor: 3, segment_m: 0.3,
+        joint_stiffness: 20000, joint_capacity_n: 600, bolt_capacity_n: 1000, joint_rot: 15, slip_factor: 3, segment_m: 0.3,
         max_rod_m: 8, lap_m: 0.3, elastic_strain: 0.004, soak_strain: 0.017, steam_strain: 0.03, profiles: {}
       },
       grow: {
@@ -53,7 +55,7 @@ SF.Defaults = (function () {
   ];
   const STICK_TYPES = [['bent', 'Bent'], ['straight', 'Straight offcut'], ['tendril', 'Tendril']];
   function design() {
-    return { version: 1, name: 'Nest study 01', families: families(), strokes: [], scalarStrokes: [], formworkEls: [] };
+    return { version: 1, name: 'Nest study 01', families: families(), strokes: [], scalarStrokes: [], formworkEls: [], baskets: [], basketOpts: null, stock: null, sketch: null };
   }
   return { SPECIES, PROFILES, SOILS, params, families, design, PRESETS_FLOW, STICK_TYPES };
 })();

@@ -1,6 +1,6 @@
 // Runs the Node tests (no browser, no dependencies): physics accuracy, model operations, growth on every frame and layout.
 const { spawnSync } = require('child_process'); const path = require('path');
-const tests = [['t_phys.js', 'physics against beam theory'], ['t_arch.js', 'stress of a sprung arch'], ['t_new.js', 'pulling, formwork, build order, undo, focused growth'], ['t_frames.js', 'growth on every frame and formwork layout']];
+const tests = [['t_phys.js', 'physics against beam theory'], ['t_arch.js', 'stress of a sprung arch'], ['t_new.js', 'pulling, formwork, build order, undo, focused growth'], ['t_frames.js', 'growth on every frame and formwork layout'], ['t_baskets.js', 'baskets of rings built ring by ring']];
 let failed = 0; const t0 = Date.now();
 for (const [file, what] of tests) {
   const t = Date.now(); const r = spawnSync(process.execPath, [path.join(__dirname, file)], { encoding: 'utf8' });

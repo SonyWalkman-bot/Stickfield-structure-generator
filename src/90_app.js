@@ -32,6 +32,7 @@
     W: null, P: null, design: null, tool: 'select', ts: {}, sel: { rods: new Set(), joints: new Set() }, hover: null,
     view: { color: 'stress', thickness: 1.5, ties: true, flow: false, flowFam: 'all', section: null, secPos: 0, secFlip: false, ortho: false, budget: 9 },
     opt: {
+      ring: { C: 4.4 },
       arch: { profile: 'frame', bundle: 1, lenMode: 'slack', slack: 1.45, length: 8, socket: 'tangent' },
       loop: { profile: 'weave', bundle: 1, length: 5, feet: 0.4, tilt: 0 },
       hoop: { profile: 'weave', bundle: 1, length: 6, plane: 'ring', attach: 0.25 },
@@ -72,7 +73,7 @@
   app.rampCSS = () => 'linear-gradient(90deg,' + SEQ.slice(1).map((n, i) => app.colors[n] + ' ' + (i / 5 * 100).toFixed(0) + '%').join(',') + ')';
   // colour modes
   const CLASSES = [['cold', 'Bent cold', 'c1'], ['soak', 'Soaked and pre-bent', 'c2'], ['straight', 'Straight offcut', 'c3'], ['steam', 'Steam-bent member', 'frame']];
-  const PROFILE_COL = { frame: 'frame', stick: 'stick', weave: 'rattan', pole: 'pole' };
+  const PROFILE_COL = { frame: 'frame', stick: 'stick', weave: 'rattan', pole: 'pole', ring: 'frame' };
   app.MODES = [['stress', 'Stress'], ['load', 'From loads'], ['order', 'Build order'], ['bending', 'Bending'], ['family', 'Family'], ['timber', 'Timber']];
   app.CLASSES = CLASSES;
   const famIdx = (id) => Math.max(0, app.design.families.findIndex((f) => f.id === id));
@@ -242,10 +243,12 @@
   app.updateEmpty = function () {
     const e = $('#empty3d'); const empty = !app.W.model.rods.size && !app.W.seq; e.hidden = !empty; $('#legend').hidden = empty; if (!empty) return; if (e.dataset.built) return; e.dataset.built = '1';
     e.innerHTML = ''; e.append(h('div', { class: 'card' },
-      h('h2', { text: 'Start with something to weave on' }),
-      h('p', { text: 'Spring a starter frame, place a formwork layout as physical members, or pick the Arch tool and click two places on the ground.' }),
+      h('h2', { text: 'Start with rings' }),
+      h('p', { text: 'Set out baskets of stacked rings with the Basket tool, lay a sketch under the design and trace it, or start from a pile of baskets.' }),
       h('div', { class: 'btns' },
-        h('button', { class: 'ib primary', onclick: () => app.placeFrame && app.placeFrame({ type: 'dome' }) }, 'Dome frame'),
+        h('button', { class: 'ib primary', onclick: () => { app.placePile(); app.frameAll(); } }, 'Pile of baskets'),
+        h('button', { class: 'ib', onclick: () => app.setTool && app.setTool('ring') }, 'Basket tool'),
+        h('button', { class: 'ib', onclick: () => app.placeFrame && app.placeFrame({ type: 'dome' }) }, 'Dome frame'),
         h('button', { class: 'ib', onclick: () => app.placeLayout && app.placeLayout('grotto') }, 'Grotto formwork'),
         h('button', { class: 'ib', onclick: () => app.setTool && app.setTool('arch') }, 'Arch tool'))));
   };
@@ -342,9 +345,10 @@
     if (app.buildRail) app.buildRail(); app.refreshAll(); app.setTool(app.TOOLS[app.tool] ? app.tool : 'select', true);
     V.setOrtho(app.view.ortho); document.querySelector('[data-view="ortho"]').setAttribute('aria-pressed', app.view.ortho ? 'true' : 'false');
     if (app.view.flow && app.updateFlow) app.updateFlow();
-    if (!loaded) { // first visit: the grotto formwork as members, then grow on it live
-      app.placeLayout('grotto', true);
-      setTimeout(() => { if (!app.W.grow) { app.startGrowth(150); app.toast('Growing 150 sticks on the grotto frame. Each batch settles under its own weight before the next grows on it. Stop it any time.', 6500); } }, 900);
+    if (app.showSketch) app.showSketch();
+    if (!loaded && app.placePile) { // first visit: a pile of baskets from the plan sketch, built ring by ring
+      app.placePile(true); app.frameAll();
+      setTimeout(() => app.toast('Seven baskets of soaked rings and bolted sticks, settling under their own weight. Scrub the build order to watch them go up ring by ring, or add your own sketch in Baskets.', 7000), 600);
     }
     // wiring
     document.addEventListener('keydown', onKey);

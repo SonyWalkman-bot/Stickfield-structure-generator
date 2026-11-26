@@ -39,7 +39,7 @@
 
   // ---------------------------------------------------------------- panel scaffolding
   const CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>';
-  const DEFAULT_OPEN = { tool: true, sel: true, start: true, grow: true, checks: true, physics: false, view: false };
+  const DEFAULT_OPEN = { tool: true, sel: true, baskets: true, start: false, grow: true, checks: true, physics: false, view: false };
   const panels = {};
   function panel(id, title, render, cls) {
     const open = app.panelsOpen && app.panelsOpen[id] != null ? app.panelsOpen[id] : DEFAULT_OPEN[id];
@@ -53,7 +53,7 @@
   }
   app.buildInspector = function () {
     const ins = $('#inspector'); const top = ins.scrollTop; ins.innerHTML = '';
-    ins.append(panel('tool', 'Tool', renderTool, 'toolpanel'), panel('sel', 'Selection', renderSel), panel('start', 'Start', renderStart), panel('grow', 'Grow', renderGrow),
+    ins.append(panel('tool', 'Tool', renderTool, 'toolpanel'), panel('sel', 'Selection', renderSel), panel('baskets', 'Baskets', (b, bd) => app.renderBaskets(b, bd)), panel('start', 'Arches and formwork', renderStart), panel('grow', 'Grow', renderGrow),
       panel('checks', 'Checks', renderChecks), panel('physics', 'Physics & materials', renderPhysics), panel('view', 'View', renderView));
     for (const k in panels) panels[k].render(); ins.scrollTop = top; app.renderSelection(); app.renderLegend();
   };
@@ -68,8 +68,9 @@
     $('#inspector').addEventListener('focusout', () => setTimeout(later, 0));
   }
   app.renderToolPanel = () => panels.tool && panels.tool.render();
+  app.renderBasketPanel = () => { if (busy()) { app.pendingRefresh = true; return; } if (panels.baskets) panels.baskets.render(); };
   app.renderGrowPanel = () => { if (busy()) { app.pendingRefresh = true; return; } if (panels.grow) panels.grow.render(); };
-  app.refreshPanels = function () { if (busy()) { app.pendingRefresh = true; return; } for (const k of ['checks', 'start']) if (panels[k]) panels[k].render(); app.renderSelection(); if (panels.grow) panels.grow.render(); app.updateStats(); };
+  app.refreshPanels = function () { if (busy()) { app.pendingRefresh = true; return; } for (const k of ['checks', 'start', 'baskets']) if (panels[k]) panels[k].render(); app.renderSelection(); if (panels.grow) panels.grow.render(); app.updateStats(); };
   app.updateStats = function () { const w = app.W; if (!w || !w.sim || !w.model.rods.size) { renderStats(null); return; } const S = SF.Checks.summary(w); renderStats(S); };
   // cheap refresh while the structure moves: only the numbers in the selection change, the panel is not rebuilt
   const selKey = () => Array.from(app.sel.rods).sort().join(',') + '|' + Array.from(app.sel.joints).sort().join(',');
@@ -103,7 +104,7 @@
   }
 
   // ---------------------------------------------------------------- selection
-  const KIND = { stick: 'Stick', frame: 'Frame member', arch: 'Arch', loop: 'Loop', hoop: 'Hoop', rod: 'Rod', weave: 'Weaver', pole: 'Ground pole', post: 'Temporary post', ridge: 'Ridge' };
+  const KIND = { ring: 'Ring', stake: 'Stake', brace: 'Brace', stick: 'Stick', frame: 'Frame member', arch: 'Arch', loop: 'Loop', hoop: 'Hoop', rod: 'Rod', weave: 'Weaver', pole: 'Ground pole', post: 'Temporary post', ridge: 'Ridge' };
   const CLASS_LABEL = { cold: 'Bent cold (springs back)', soak: 'Soaked and pre-bent', steam: 'Steam-bent to shape', straight: 'Straight', pole: 'Staked on the ground' };
   function renderSel(b) {
     const w = app.W; const sim = app.activeSim(); const rods = Array.from(app.sel.rods).filter((id) => w.model.rods.has(id)); const joints = Array.from(app.sel.joints);
@@ -116,6 +117,7 @@
       const r = w.model.rods.get(rods[0]); const e = sim && sim.index.get(r.id); const k = e ? e.k : -1; const sp = PH.sectionOf(w.model.material, r);
       const fam = r.fam ? app.design.families.find((f) => f.id === r.fam) : null; const cls = app.rodClass(r, sp);
       const nl = w.model.joints.filter((j) => j.a === r.id || j.b === r.id).length;
+      if (r.bk && app.basketSel) app.basketSel(b, r);
       b.append(h('div', { class: 'row two' }, h('span', { class: 'lab', html: `<b style="color:var(--ink)">${KIND[r.kind] || 'Rod'}</b> <span class="mono">${r.id}</span>` }), h('span', { class: 'hint', text: fam ? fam.name + ' (' + fam.id + ')' : r.temp ? 'struck when the formwork comes out' : r.held ? 'on scaffolding' : '' })));
       const vPeak = h('span'), vS = h('span'), vF = h('span'), vL = h('span');
       const upd = () => {

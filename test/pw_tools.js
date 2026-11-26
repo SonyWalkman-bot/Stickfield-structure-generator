@@ -11,7 +11,7 @@ const { setup, SHOTS, EMPTY, tally } = require('./pw');
   const t = tally(); const ok = t.ok;
   ok(await page.isVisible('#empty3d'), 'empty card shows on an empty design');
   await page.screenshot({ path: SHOTS + '/10_empty.png' });
-  await page.click('#empty3d .ib.primary'); await settle();
+  await page.click('#empty3d button:has-text("Dome frame")'); await settle();
   let r = await R(); ok(r.rods === 3, 'dome frame: ' + JSON.stringify(r));
   await page.evaluate(() => SF.View.view('persp')); await page.evaluate(() => WF.frameAll()); await page.waitForTimeout(300);
   await page.screenshot({ path: SHOTS + '/11_dome.png' });

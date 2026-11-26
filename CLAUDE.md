@@ -1,6 +1,7 @@
 # Weavefield: notes for Claude and other coding agents
 
-Weavefield grows woven stick structures on a live physical model. Every rod is a chain of springs that bends and settles
+Weavefield builds basketry structures on a live physical model: soaked rings stacked into baskets, braced with sticks
+and bolted, and baskets piled and bolted together. It can also spring arches and grow sticks over any structure. Every rod is a chain of springs that bends and settles
 under its own weight, every lashing is a spring that can slip, and what the user sees is always the relaxed shape. It
 ships as one HTML page: published on claude.ai, and as an offline copy that runs from a single file.
 
@@ -10,7 +11,7 @@ Read this before changing code. The README is for people using the tool; this fi
 
 ```bash
 npm run build          # dist/weavefield.html (published page), dist/Weavefield.html (offline copy), dist/Weavefield.zip, dist/test.html
-npm test               # Node tests: physics against beam theory, model operations, growth on every layout (about 10 s, no dependencies)
+npm test               # Node tests: physics against beam theory, model operations, growth on every layout, baskets built ring by ring (about 20 s, no dependencies)
 npm ci && npx playwright install chromium   # once, for the browser tests
 npm run test:smoke     # browser: first visit, a tool, undo, saving files (about a minute)
 npm run test:offline   # browser: the offline copy from a folder with the network cut off
@@ -39,6 +40,7 @@ There is no bundler and there are no imports. `build.js` concatenates `src/*.js`
 | `12_formwork.js` | `SF.Formwork` | formwork elements and layouts (from Stickfield): ground loops, hoops, arches, posts |
 | `20_physics.js` | `SF.Phys` | the simulation: `build(model)` turns the design into flat typed arrays; `iterate`/`relax` solve it; `stress`, `reactions`, `grab`/`drop` |
 | `30_model.js` | `SF.Model` | the design data and every operation on it: arch, loop, hoop, rod, weave, frames, hoops, lashings, formwork, strike, stages |
+| `32_basket.js` | `SF.Basket` | baskets: rings from a definition, bracing patterns, the staged build, bolting baskets together, material against stock, tested limits, finding circles in a sketch |
 | `35_fields.js` | `SF.Fields` | each stick family's flow field over the current members |
 | `40_grow.js` | `SF.Grow` | stick growth: `setup` gathers sites and rules, `place` adds sticks that pass them |
 | `45_world.js` | `SF.World` | the live world: design plus running simulation, edits with undo and redo, growth in batches, build-order replay |
@@ -49,6 +51,7 @@ There is no bundler and there are no imports. `build.js` concatenates `src/*.js`
 | `92_panels.js` | | inspector panels (tool, selection, start, grow, checks, physics, view) and the legend |
 | `93_timeline.js` | | build-order bar: scrub, play, check every stage |
 | `94_files.js` | | Files drawer, offline copy, saved versions, opening designs (Stickfield too), help, confirm dialog |
+| `95_baskets.js` | | the Basket tool, the Baskets panel (sketch underlay, ring finding, defaults, stock), the basket editor in the selection |
 | `template.html` | | markup and all CSS, including the light and dark design tokens |
 
 The Node tests load modules 00 to 60 with `test/load.js`, so everything up to `SF.Checks` must run without a DOM.
@@ -57,11 +60,13 @@ The Node tests load modules 00 to 60 with `test/load.js`, so everything up to `S
 
 A design file (`weavefield-design/1`) is
 `{ format, saved, name, design: { name, families, strokes, scalarStrokes, formworkEls }, params: { material, grow, ground, view }, model }`
-and `model` is `{ rods: [...], joints: [...], meta: { stage, next, events } }`.
+and `model` is `{ rods: [...], joints: [...], meta: { stage, next, events, baskets } }`. `meta.baskets` holds the basket
+definitions (it lives in the model so undo brings them back); `design` also carries `basketOpts` (defaults for new
+baskets), `stock` (what is in the yard) and `sketch` (the underlay image as a data URL, its width in metres and place).
 
 A **rod** has:
 
-- `id` like `r12`, and `kind`: stick, frame, arch, loop, hoop, rod, weave, pole, post or ridge
+- `id` like `r12`, and `kind`: ring, stake, brace, stick, frame, arch, loop, hoop, rod, weave, pole, post or ridge
 - `pts`, the relaxed node positions (metres, Y up), written back by `World.sync()` once it settles
 - `L`, the rest length; `stage`; `closed`
 - `fix`, its ground sockets: `{ i, p, d? }`, where `d` is the clamp direction and no `d` means pinned
@@ -73,6 +78,7 @@ A **rod** has:
   - `fw` and `fwId`, if it came from a formwork element
   - `rest`, the shape a pre-bent or steam-bent rod keeps
   - `cls` (cold, soak or straight)
+  - `bk`, `part` and `rk`: the basket a rod belongs to, what it is there (ring, stake or brace) and a ring's place in its stack
   - `k0`, its curvature × 1000 when it first settled
 
 A **lashing** (`joints`) has:
@@ -81,6 +87,7 @@ A **lashing** (`joints`) has:
 - `stage`
 - optional fields:
   - `k`, its own stiffness
+  - `type: 'bolt'` (capacity `bolt_capacity_n`, 1 kN) or its own capacity `cap` in N
   - `wraps`, bound that many times: stiffness and capacity times that
   - `grip`, the rest lengths of its grip braces, stored once it first settles
 
@@ -132,6 +139,21 @@ the replay can put the scaffolding back.
 
 `test/t_phys.js` checks the physics against beam theory (cantilever tip deflection, elastica rise) and against statics
 (a lashing carries the weight it holds). Keep it passing; if a number moves, say why in the pull request.
+
+## Baskets (`32_basket.js`)
+
+The material limits come from the bending tests and are in `SF.Basket.LIMITS`; keep them there.
+
+- A ring is one 18-20 mm pole, soaked and bent: 3.7 to 5.0 m round (1.17 to 1.6 m across). Above 4.5 m it has not
+  been bent yet, so it is flagged. Over 4.75 m a 5 m pole cannot lap, so it needs a splice piece.
+- A soaked 20 mm stick bends to 0.587 m radius at the tightest. Sticks bent tighter than they spring back are soaked
+  (`cls: 'soak'`, with a rest shape); tighter than 0.587 m is flagged as impossible.
+- A basket is a definition: base ring size, ring count and spacing, profile, lean, bracing (lattice, diagonals,
+  stakes or spiral), stick spacing, tops, doorway and base. `Basket.buildAll(m, baskets, opts, stage)` rebuilds every
+  basket from the definitions, so any edit to a basket rebuilds them all.
+- The build: the base ring on the ground (pegged), each ring above held on formwork, the sticks bolted in, then the
+  formwork struck (after each basket, or at the end), then baskets bolted where their rings cross.
+- `findCircles` is a plain Hough transform on a greyscale array; it runs in Node, so test it there.
 
 ## Growth (`40_grow.js`, from Stickfield)
 

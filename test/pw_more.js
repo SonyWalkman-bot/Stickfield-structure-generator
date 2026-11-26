@@ -8,7 +8,8 @@ const saved = fs.readFileSync(FIXTURE, 'utf8');
   await settle();
   let r = await page.evaluate(() => ({ rods: WF.W.model.rods.size, held: Array.from(WF.W.model.rods.values()).filter((q) => q.held).length }));
   ok(r.rods > 100 && r.held === 1, 'grown grotto loaded: ' + JSON.stringify(r));
-  // strike the formwork
+  // strike the formwork (in the Arches and formwork panel)
+  if (await page.$('section[data-panel="start"].closed')) await page.click('section[data-panel="start"] header');
   await page.click('button:has-text("Strike the formwork")'); await page.waitForTimeout(300); await settle();
   r = await page.evaluate(() => ({ held: Array.from(WF.W.model.rods.values()).filter((q) => q.held).length, events: (WF.W.model.meta.events || []).length, toast: document.getElementById('toast').textContent }));
   ok(r.held === 0 && r.events === 1, 'struck: ' + JSON.stringify(r));

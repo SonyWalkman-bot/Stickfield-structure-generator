@@ -2,8 +2,8 @@
 // one self-contained file with three.js and the fonts inside) zipped with a README for sharing (dist/Weavefield.zip).
 const fs = require('fs'); const path = require('path'); const zlib = require('zlib');
 const P = (...a) => path.join(__dirname, ...a);
-const order = ['00_math.js', '05_defaults.js', '10_field.js', '12_formwork.js', '20_physics.js', '30_model.js', '35_fields.js', '40_grow.js', '45_world.js', '60_checks.js',
-  '80_view.js', '90_app.js', '91_tools.js', '92_panels.js', '93_timeline.js', '94_files.js'];
+const order = ['00_math.js', '05_defaults.js', '10_field.js', '12_formwork.js', '20_physics.js', '30_model.js', '32_basket.js', '35_fields.js', '40_grow.js', '45_world.js', '60_checks.js',
+  '80_view.js', '90_app.js', '91_tools.js', '92_panels.js', '93_timeline.js', '94_files.js', '95_baskets.js'];
 const BUILD = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 const modules = order.map((f) => `/* ===== ${f} ===== */\n` + fs.readFileSync(P('src', f), 'utf8')).join('\n');
 const bundle = (standalone) => `window.SF = window.SF || {}; SF.STANDALONE = ${standalone}; SF.BUILD = ${JSON.stringify(BUILD)};\n` + modules;

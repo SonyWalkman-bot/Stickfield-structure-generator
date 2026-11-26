@@ -93,7 +93,7 @@ SF.Phys = (function () {
       const A = index.get(j.a), B = index.get(j.b); if (!A || !B) continue;
       const pa = at(A, rods[A.k], j.ia, j.ta || 0), pb = at(B, rods[B.k], j.ib, j.tb || 0); if (pa[0] === pb[0] && !pa[2] && !pb[2]) continue;
       const wr = Math.max(1, Math.min(4, Math.round(j.wraps || 1))); // a lashing bound twice is twice as stiff and strong
-      jt.push(pa[0], pa[1], pa[2], pb[0], pb[1], pb[2], (j.k || mat.joint_stiffness) * wr); jointIds.push(j.id); jcap.push(mat.joint_capacity_n * wr);
+      jt.push(pa[0], pa[1], pa[2], pb[0], pb[1], pb[2], (j.k || mat.joint_stiffness) * wr); jointIds.push(j.id); jcap.push((j.cap || (j.type === 'bolt' ? mat.bolt_capacity_n || 1000 : mat.joint_capacity_n)) * wr);
       // the grip remembers the lie of the two rods when the lashing was tied (j.grip, written once it first settles), so
       // rebuilding the simulation does not let a lashed stick ratchet round a little more each time
       const kj = kr * Math.min(1, rodP[A.k].EI / EIref, rodP[B.k].EI / EIref); const fresh = j.stage === latest ? 1 : 0;

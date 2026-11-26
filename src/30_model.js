@@ -279,9 +279,9 @@ SF.Model = (function () {
   }
   // release: struck members come out, held members come off their scaffolding
   // (remembered as an event so the build order can replay the scaffolding up to the stage it came out)
-  function release(m, stage) {
+  function release(m, stage, only) {
     const struck = [], held = [];
-    for (const r of m.rods.values()) { if (r.temp) struck.push(r.id); else if (r.held) { held.push(r.id); delete r.held; r.v = (r.v || 0) + 1; } }
+    for (const r of m.rods.values()) { if (only && !only.has(r.id)) continue; if (r.temp) struck.push(r.id); else if (r.held) { held.push(r.id); delete r.held; r.v = (r.v || 0) + 1; } }
     if (struck.length || held.length) {
       const gone = new Set(struck);
       (m.meta.events = m.meta.events || []).push({ type: 'release', stage: stage == null ? m.meta.stage : stage, held,

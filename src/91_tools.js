@@ -7,6 +7,7 @@
   const UP = [0, 1, 0];
   const ICON = {
     select: '<path d="m5 3 14 8-6 2-2 6Z"/>',
+    ring: '<ellipse cx="12" cy="17" rx="8" ry="3"/><ellipse cx="12" cy="11.5" rx="7" ry="2.6"/><ellipse cx="12" cy="6.5" rx="6" ry="2.2"/><path d="M5 16.5 7 7M19 16.5 17 7" opacity=".6"/>',
     arch: '<path d="M3.5 20C3.5 8.5 20.5 8.5 20.5 20"/><path d="M1.5 20h4M18.5 20h4"/>',
     loop: '<path d="M9.5 20C5 14 5.5 5 12 4.5S19 14 14.5 20"/><path d="M6.5 20h11"/>',
     hoop: '<ellipse cx="12" cy="11" rx="8" ry="4.2"/><path d="M4 11v2.5c0 2.3 3.6 4.2 8 4.2s8-1.9 8-4.2V11" opacity=".5"/>',
@@ -22,6 +23,7 @@
   app.svgI = svgI;
   const TOOLS = app.TOOLS = {
     select: { label: 'Select', key: 'V', icon: 'select', tip: 'Inspect rods and lashings', steps: ['Click a rod or a lashing to inspect it. Shift-click adds to the selection; Delete removes it.'] },
+    ring: { label: 'Basket', key: 'B', icon: 'ring', tip: 'Set out a basket of stacked rings on the ground, or stack another ring on one', steps: ['Click the ground where the basket goes (on a sketch, its centre), or click a basket to stack a ring on it', 'Click again to size its base ring (3.7 to 5.0 m round)'] },
     arch: { label: 'Arch', key: 'A', icon: 'arch', tip: 'Spring a rod into an arch between two places', steps: ['Click where the arch starts: a point on a rod, or the ground', 'Click where it ends: the rod springs into an arch between them'] },
     loop: { label: 'Loop', key: 'L', icon: 'loop', tip: 'Stand a loop on a rod or the ground', steps: ['Click a rod or the ground to stand a loop there'] },
     hoop: { label: 'Hoop', key: 'O', icon: 'hoop', tip: 'Place a hoop: a ring round a point, or standing on the ground', steps: ['Click a rod to ring it with a hoop, or the ground to stand one there. It is lashed wherever it meets rods'] },
@@ -33,8 +35,8 @@
     remove: { label: 'Remove', key: 'X', icon: 'remove', tip: 'Remove a rod or a lashing', steps: ['Click a rod or a lashing to remove it'] }
   };
   app.TOOL_KEYS = {}; for (const id in TOOLS) app.TOOL_KEYS[TOOLS[id].key.toLowerCase()] = id;
-  const RAIL = ['select', '|', 'arch', 'loop', 'hoop', 'rod', 'weave', 'lash', '|', 'grow', 'pull', '|', 'remove'];
-  const EDITS = new Set(['arch', 'loop', 'hoop', 'rod', 'weave', 'lash', 'grow', 'pull', 'remove']);
+  const RAIL = ['select', '|', 'ring', '|', 'arch', 'loop', 'hoop', 'rod', 'weave', 'lash', '|', 'grow', 'pull', '|', 'remove'];
+  const EDITS = new Set(['ring', 'arch', 'loop', 'hoop', 'rod', 'weave', 'lash', 'grow', 'pull', 'remove']);
 
   // ---------------------------------------------------------------- rail and hint bar
   app.buildRail = function () {
@@ -125,6 +127,7 @@
     V.anchor(ts.a ? ts.a.p : null);
     if (!pk) { V.hover(null); if (T !== 'rod') { V.setPreview([]); V.setMarks([]); } else drawRodPreview(null); renderHint(); return; }
     V.hover(pk.p, acc, pk.kind === 'ground' ? 0.8 : 1);
+    if (T === 'ring') { if (app.ringPreview) app.ringPreview(pk); renderHint(); return; }
     if (T === 'arch') {
       if (!ts.a) { V.setPreview([]); V.setMarks([]); }
       else if (!same(ts.a, pk)) { const L = archLen(ts.a.p, pk.p); const n = Mo.segCount(L, app.W.model.material) + 1; V.setPreview([Mo.arcBetween(ts.a.p, pk.p, L, UP, n).pts], acc); V.setMarks([]); app.ts.info = 'span ' + fmt.m(M.dist(ts.a.p, pk.p), 1) + ' · rod ' + fmt.m(L, 1); }
@@ -174,6 +177,7 @@
       else if (pk.kind === 'joint') app.edit('Lashing removed', (m) => Mo.remove(m, [], [pk.id]));
       app.hover = null; return;
     }
+    if (T === 'ring') { if (app.ringClick) app.ringClick(pk, e); return; }
     if (!pk) return;
     if (T === 'arch') {
       if (!ts.a) { ts.a = pk; app.toolPreview(); return; }

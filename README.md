@@ -1,6 +1,6 @@
 # Weavefield
 
-Grow woven stick structures on a live physical model.
+Design basketry structures from rings, on a live physical model, and see whether they can be built.
 
 *This repository is named after Stickfield, the structure generator Weavefield grew out of.*
 
@@ -20,6 +20,17 @@ them.
 Everything is in that one file, so you can share it by email, a shared drive or a USB stick.
 
 ## What you can do
+
+- **Start with rings.** Set out baskets of stacked rings with the Basket tool, or lay a sketch of the plan under the
+  design and trace it, or let Weavefield find the circles in it. Rings stay inside what the material does: 3.7 to
+  5.0 m round, one 18-20 mm pole each, soaked and bent.
+- **Brace the rings.** Lattice, diagonal, stake or spiral bracing, with tops that run up past the last ring and
+  doorways left open. Every basket can lean, taper, flare or bulge; pick a ring to change its basket.
+- **Build it step by step.** Each ring goes up on its formwork and is braced before the next; then the formwork comes
+  out and the basket has to stand. Baskets are bolted together where their rings cross. Scrub the build order to see
+  every step settle under its own weight.
+- **Check it against the yard.** Poles, sticks, bolts and clamps needed against what you have in stock, and every ring
+  or bend beyond what has been tested.
 
 - **Start from a frame.** Spring a cross, dome, tunnel or tripod: rods longer than the span bow into arches in their
   ground sockets. Or place a formwork layout (grotto, nest, tunnel, twin hoops, a spiral of posts, a pole triangle) as

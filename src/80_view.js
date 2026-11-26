@@ -136,6 +136,21 @@ SF.View = (function () {
   V.clearStructure = function () { for (const key of ['segs', 'knots', 'ties', 'pads']) if (G[key]) G[key].count = 0; G.gap.geometry.setAttribute('position', new T.Float32BufferAttribute([], 3)); needs = true; };
 
   // ---------------- overlays ----------------
+  // a sketch under the design: an image laid on the ground (plan) or stood up behind it (elevation), at a scale in metres
+  V.setUnderlay = function (o) {
+    if (!V.ready) return; const T = THREE;
+    if (G.under && (!o || G.under.userData.src !== o.src)) { scene.remove(G.under); G.under.geometry.dispose(); if (G.under.material.map) G.under.material.map.dispose(); G.under.material.dispose(); G.under = null; }
+    if (!o || !o.img || o.show === false) { if (G.under) G.under.visible = false; V.render && V.render(); return; }
+    if (!G.under) {
+      const tex = new T.Texture(o.img); tex.needsUpdate = true; if (T.sRGBEncoding) tex.encoding = T.sRGBEncoding;
+      G.under = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: T.DoubleSide, toneMapped: false }));
+      G.under.renderOrder = -1.5; G.under.userData.src = o.src; scene.add(G.under);
+    }
+    const u = G.under; const asp = (o.img.height || 1) / (o.img.width || 1); u.visible = true; u.material.opacity = o.opacity == null ? 0.6 : o.opacity; u.scale.set(o.w, o.w * asp, 1);
+    if (o.plane === 'front') { u.rotation.set(0, 0, 0); u.position.set(o.cx || 0, o.w * asp / 2, (o.cz || 0) - 3); }
+    else { u.rotation.set(-Math.PI / 2, 0, (o.rot || 0) * Math.PI / 180); u.position.set(o.cx || 0, 0.0005, o.cz || 0); }
+    if (V.render) V.render();
+  };
   V.setPreview = function (lines, color) {
     const a = []; for (const l of lines || []) for (let i = 0; i + 1 < l.length; i++) a.push(l[i][0], l[i][1], l[i][2], l[i + 1][0], l[i + 1][1], l[i + 1][2]);
     G.preview.geometry.setAttribute('position', new T.Float32BufferAttribute(a, 3)); G.preview.geometry.computeBoundingSphere(); G.preview.visible = a.length > 0; if (color) G.preview.material.color.copy(lin(color)); needs = true;
