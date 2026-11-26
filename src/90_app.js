@@ -248,7 +248,7 @@
       h('h2', { text: 'Start with rings' }),
       h('p', { text: 'Set out baskets of stacked rings with the Basket tool, lay a sketch under the design and trace it, or start from a pile of baskets.' }),
       h('div', { class: 'btns' },
-        h('button', { class: 'ib primary', onclick: () => { app.placeBasketLayout('swirl'); app.frameAll(); } }, 'Swirling tower'),
+        h('button', { class: 'ib primary', onclick: () => { app.placeBasketLayout('pair'); app.frameAll(); } }, 'Two pointed pods'),
         h('button', { class: 'ib', onclick: () => app.setTool && app.setTool('ring') }, 'Basket tool'),
         h('button', { class: 'ib', onclick: () => app.placeFrame && app.placeFrame({ type: 'dome' }) }, 'Dome frame'),
         h('button', { class: 'ib', onclick: () => app.placeLayout && app.placeLayout('grotto') }, 'Grotto formwork'),
@@ -349,8 +349,8 @@
     if (app.view.flow && app.updateFlow) app.updateFlow();
     if (app.showSketch) app.showSketch();
     if (!loaded && app.placeBasketLayout) { // first visit: the notebook plan, baskets built ring by ring and clad
-      app.placeBasketLayout('swirl', true); app.frameAll();
-      setTimeout(() => app.toast('A swirling tower of tipped rings, bolted where they cross and clad along them, settling under its own weight. Scrub the build order to watch it go up ring by ring, or pick a ring to move it.', 7000), 600);
+      app.placeBasketLayout('pair', true); app.frameAll();
+      setTimeout(() => app.toast('Two pointed baskets of stacked rings, bolted where they meet, with one skin of cladding over both, settling under its own weight. Scrub the build order to watch it go up ring by ring, or pick a ring to move it.', 7000), 600);
     }
     // wiring
     document.addEventListener('keydown', onKey);

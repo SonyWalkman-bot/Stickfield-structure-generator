@@ -22,19 +22,20 @@ Everything is in that one file, so you can share it by email, a shared drive or 
 ## What you can do
 
 - **Start with rings.** Set out baskets of stacked rings with the Basket tool, or lay a sketch of the plan under the
-  design and trace it, or let Weavefield find the circles in it. Rings stay inside what the material does: 3.7 to
-  5.0 m round, one 18-20 mm pole each, soaked and bent.
+  design and trace it, or let Weavefield find the circles in it. Every ring belongs to a basket. A ring is at least
+  1.2 m across (the tightest a soaked 18-20 mm pole bends) and has no upper size: past one 5 m pole it is spliced from
+  several, and Weavefield says what it takes a crew to bend, lift and prop it by hand, and which sizes haven't been
+  bent yet.
 - **Twist and overlap.** Rings can tip, turn round the stack as they go up and drift off centre, so baskets swirl,
   zigzag and fan open; tipped rings cut through each other and are bolted where they cross. Pick any ring to resize,
-  tip or move it on its own.
-- **Brace the rings.** Lattice, diagonal, stake or spiral bracing, with tops that run up past the last ring and
-  doorways left open. Every basket can lean, taper, flare or bulge; pick a ring to change its basket.
-- **Free rings.** Place rings one by one any way up: standing on the ground, hung through other rings, or swept in
-  runs that arch, coil and twist. Copy them round, mirror, twist or shake the whole set. Each ring is bolted where it
-  crosses another, and Weavefield says what a small crew with ladders, bolts and clamps can't do.
-- **Clad it.** Grow thin sticks over free rings, following and spinning round them, or cover the baskets in sticks that follow their shape (along the rings, with the twist, rising like
-  a flame, or flowing from one to the other), lashed where they cross the rings, their ends
-  running on past the baskets.
+  tip or move it on its own, add a ring above it or take it out. A basket takes up to 30 rings.
+- **Brace the rings.** Lattice, diagonal, stake or spiral bracing. The top can be open, with sticks running up past
+  the last ring, or pointed: the bracing carries on past the top ring and is bound together at a point. Every basket
+  can lean, taper, flare or bulge.
+- **Clad the whole structure.** One skin of thin sticks over every basket at once: where baskets meet it runs across
+  the join, never into the space between them, so the whole thing reads as one form. The sticks follow one direction
+  field (along the rings, with the twist, rising, flowing or any way), are lashed where they cross a ring or stick,
+  and any that would crack or overload the baskets are left off.
 - **Build it step by step.** Each ring goes up on its formwork and is braced before the next; then the formwork comes
   out and the basket has to stand. Baskets are bolted together where their rings cross. Scrub the build order to see
   every step settle under its own weight.

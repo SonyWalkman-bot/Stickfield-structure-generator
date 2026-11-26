@@ -8,17 +8,16 @@ const { setup, SHOTS, tally } = require('./pw');
   const { browser, page, logs } = await setup({ wait: 300, init: `try { localStorage.clear(); } catch (e) {}` + mock });
   await page.waitForFunction(() => WF.W.settled, null, { timeout: 120000 }).catch(() => {});
   let r = await page.evaluate(() => ({ baskets: (WF.W.model.meta.baskets || []).length, rings: Array.from(WF.W.model.rods.values()).filter((q) => q.kind === 'ring').length, clad: Array.from(WF.W.model.rods.values()).filter((q) => q.kind === 'clad').length, settled: WF.W.settled }));
-  t.ok(r.baskets === 3 && r.rings >= 12 && r.clad > 50 && r.settled, 'first visit: the swirling tower is built, clad and settles ' + JSON.stringify(r));
+  t.ok(r.baskets === 2 && r.rings >= 9 && r.clad > 40 && r.settled, 'first visit: two pointed pods are built under one skin and settle ' + JSON.stringify(r));
   // the Basket tool: click the ground, click again to size the base ring
-  const nb = await page.evaluate(() => { WF.setTool('ring'); const n0 = WF.W.model.meta.baskets.length; WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); WF.ringClick({ kind: 'ground', p: [6.7, 0, 0] }); return [n0, WF.W.model.meta.baskets.length, Array.from(WF.W.model.rods.values()).filter((q) => q.bk === 'B4' && q.kind === 'ring').map((q) => q.L)]; });
-  t.ok(nb[1] === nb[0] + 1 && nb[2].length >= 1 && nb[2][0] >= 3.7 && nb[2][0] <= 5.0, 'Basket tool set out a basket: rings ' + JSON.stringify(nb[2]));
-  const st = await page.evaluate(() => { WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); return WF.W.model.meta.baskets.find((b) => b.id === 'B4').rings; });
+  const nb = await page.evaluate(() => { WF.setTool('ring'); const n0 = WF.W.model.meta.baskets.length; WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); WF.ringClick({ kind: 'ground', p: [6.7, 0, 0] }); return [n0, WF.W.model.meta.baskets.length, Array.from(WF.W.model.rods.values()).filter((q) => q.bk === 'B3' && q.kind === 'ring').map((q) => q.L)]; });
+  t.ok(nb[1] === nb[0] + 1 && nb[2].length >= 1 && nb[2][0] >= Math.PI * 1.2 - 1e-6 && nb[2][0] <= 5.0, 'Basket tool set out a basket: rings ' + JSON.stringify(nb[2]));
+  const st = await page.evaluate(() => { WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); return WF.W.model.meta.baskets.find((b) => b.id === 'B3').rings; });
   t.ok(st === nb[2].length + 1, 'clicking a basket stacks another ring on it (' + st + ' rings)');
   await page.evaluate(() => { WF.undo(); WF.undo(); WF.setTool('select'); });
-  // free rings: one placed on the ground, then a sweep of them
-  const fr = await page.evaluate(() => { const n0 = (WF.W.model.meta.free || []).length; WF.setTool('free'); WF.freeClick('free', { kind: 'ground', p: [5, 0, 3] }); const n1 = WF.W.model.meta.free.length; WF.setTool('sweep'); WF.freeClick('sweep', { kind: 'ground', p: [4, 0, -4] }); WF.freeClick('sweep', { kind: 'ground', p: [8, 0, -4] }); const n2 = WF.W.model.meta.free.length; WF.setTool('select'); return [n0, n1, n2]; });
-  t.ok(fr[1] === fr[0] + 1 && fr[2] > fr[1] + 2, 'Free ring and Ring sweep tools add rings ' + JSON.stringify(fr));
-  await page.evaluate(() => { WF.undo(); WF.undo(); });
+  // the skin comes off and goes back on with undo
+  const sk = await page.evaluate(() => { const n = () => Array.from(WF.W.model.rods.values()).filter((q) => q.bk === 'skin').length; const n0 = n(); WF.setSkin({ on: false }, 'off'); const n1 = n(); WF.undo(); return [n0, n1, n()]; });
+  t.ok(sk[0] > 40 && sk[1] === 0 && sk[2] === sk[0], 'the skin comes off and undo puts it back ' + JSON.stringify(sk));
   // Remove all, then undo
   await page.click('#clearBtn'); await page.click('#dialog .primary, #dialog button.danger'); await page.waitForTimeout(300);
   const ra = await page.evaluate(() => WF.W.model.rods.size); t.ok(ra === 0, 'Remove all empties the design');
@@ -28,7 +27,8 @@ const { setup, SHOTS, tally } = require('./pw');
   // the arch tool, through real pointer events
   const scr = (p) => page.evaluate((p) => { const q = SF.View.project(p); const b = document.getElementById('gl').getBoundingClientRect(); return [b.left + q[0], b.top + q[1]]; }, p);
   const n0 = await page.evaluate(() => WF.W.model.rods.size);
-  await page.keyboard.press('a'); for (const p of [[-1.5, 0, 0.5], [1.5, 0, 0.9]]) { const [x, y] = await scr(p); await page.mouse.move(x, y); await page.waitForTimeout(80); await page.mouse.click(x, y); await page.waitForTimeout(150); }
+  await page.evaluate(() => WF.frameAll()); await page.waitForTimeout(300);
+  await page.keyboard.press('a'); for (const p of [[-2.2, 0, 1.9], [-2.5, 0, -0.8]]) { const [x, y] = await scr(p); await page.mouse.move(x, y); await page.waitForTimeout(80); await page.mouse.click(x, y); await page.waitForTimeout(150); }
   const n1 = await page.evaluate(() => WF.W.model.rods.size); t.ok(n1 === n0 + 1, 'arch tool added a rod (' + n0 + ' → ' + n1 + ')');
   await page.keyboard.press('Control+z'); await page.waitForTimeout(200); t.ok(await page.evaluate(() => WF.W.model.rods.size) === n0, 'undo takes it away');
   // files: the offline copy and the cut list go through the downloads capability

@@ -52,7 +52,6 @@ There is no bundler and there are no imports. `build.js` concatenates `src/*.js`
 | `93_timeline.js` | | build-order bar: scrub, play, check every stage |
 | `94_files.js` | | Files drawer, offline copy, saved versions, opening designs (Stickfield too), help, confirm dialog |
 | `95_baskets.js` | | the Basket tool, the Baskets panel (sketch underlay, ring finding, defaults, stock), the basket editor in the selection |
-| `96_free.js` | | the Free ring and Ring sweep tools, the Free rings panel (layouts, whole-set moves, flow cladding, crew checks), the free-ring editor |
 | `template.html` | | markup and all CSS, including the light and dark design tokens |
 
 The Node tests load modules 00 to 60 with `test/load.js`, so everything up to `SF.Checks` must run without a DOM.
@@ -146,12 +145,16 @@ the replay can put the scaffolding back.
 
 The material limits come from the bending tests and are in `SF.Basket.LIMITS`; keep them there.
 
-- A ring is one 18-20 mm pole, soaked and bent: 3.7 to 5.0 m round (1.17 to 1.6 m across). Above 4.5 m it has not
-  been bent yet, so it is flagged. Over 4.75 m a 5 m pole cannot lap, so it needs a splice piece.
+- A ring belongs to a basket. It is at least 1.2 m across (`cMin`, the tightest a soaked pole bends) and has no upper
+  size (`cMax` only bounds the sliders). Up to one 5 m pole less a lap it is one pole; past that it is spliced from
+  `ringPoles(C)` poles. Over 4.5 m round (`cTested`) it has not been bent yet, so it is flagged; `issues` also says
+  what it takes to bend, lift and prop it by hand (four people over 2.5 m across, six and props over 3.5 m, a scaffold
+  tower when the top is over 3.6 m up). A basket takes up to `maxRings` (30) rings.
 - A soaked 20 mm stick bends to 0.587 m radius at the tightest. Sticks bent tighter than they spring back are soaked
   (`cls: 'soak'`, with a rest shape); tighter than 0.587 m is flagged as impossible.
 - A basket is a definition: base ring size, ring count and spacing, profile, lean, bracing (lattice, diagonals,
-  stakes or spiral), stick spacing, tops, doorway and base. `Basket.buildAll(m, baskets, opts, stage)` rebuilds every
+  stakes or spiral), stick spacing, tops, doorway and base. `top: 'point'` carries the stakes (or crown sticks) on
+  past the top ring to one point `apex` m above it, where their ends are bound together in pairs and across. `Basket.buildAll(m, baskets, opts, stage)` rebuilds every
   basket from the definitions, so any edit to a basket rebuilds them all.
 - Rings can twist and tip: each ring above the base tips by `tilt` towards a direction that turns by `twist` per ring
   (`tiltMode`: same, alternate or fanning open), and the centres drift round a widening helix (`drift`).
@@ -159,22 +162,19 @@ The material limits come from the bending tests and are in `SF.Basket.LIMITS`; k
 - The build: the base ring on the ground (pegged), then each ring above on its formwork, bolted as it goes up to every
   ring already standing that it crosses (its own and other baskets', `connectRing`), then the sticks; then the formwork
   is struck (after each basket, or at the end). Continuous sticks are cut where tipped rings fold into each other.
-- Cladding (`clad`, per basket `b.clad`) goes on last, band by band: thin 10 × 20 mm sticks (profile `clad`, a 14 mm
-  square of the same area) marched over the ruled surface through the rings (`surf`) in a direction (`cladDir`: along
-  rings, twist, rise, flow or random), smoothed over the creases, lashed wherever they cross the basket's rods. A stick
-  needs three lashings (four if pre-bent); kinked sticks that would crack cold are left off. They count against the
-  thin sticks in stock.
-- Layouts live in `SF.Basket.LAYOUTS`; `swirl` (a twisting, clad tower) is the first visit. `test/t_baskets.js` checks
-  every layout settles inside its strength with nothing bent beyond the tested limits.
-- Free rings (`meta.free`: `{ id, c, C, tilt, az }`, rods tagged `bk: 'net'` and `fr`) are placed any way up, after
-  the baskets, one stage each on formwork. A ring that reaches the ground is pegged there. Each is bolted where it
-  crosses a ring, or joined by a short bolted block (`part: 'block'`) where it passes within 0.35 m. `sweep` makes runs
-  of them along an arching or coiling path, `ringOps` copies, mirrors, twists, shakes or resizes them all, and
-  `freeChecks` says what a small crew can't do: floating rings, rings on two bolts, ladder or scaffold heights, and
-  glancing crossings.
-- Flow cladding over free rings (`cladNet`) follows the rings' tangent field, spins round them and is drawn back to
-  them. Cladding is laid on the settled structure (`settle` relaxes it first), and net cladding the settled structure
-  would overload (over 95%) is left off.
+- Cladding is one skin over the whole structure (`skin`, settings in `meta.skin`, from `skinOpts`). Each basket's
+  surface is ruled between its settled rings (and up to its point); `sdAll` takes a smooth union of them (`blend`,
+  metres), so the skin runs across where baskets meet and never into the space inside an overlap. Sticks are seeded on
+  each basket's surface (not inside another), marched over the union in one direction field (`dir`: rings, twist, rise,
+  flow or random) and projected back onto it, then laid on in 0.7 m height bands. A stick needs three lashings to rods
+  within 0.11 m (four, and 1.3 m, if pre-bent); kinked or too-tight sticks are left off. Cladding is laid on the
+  settled structure (`settle`), then up to three passes take off sticks over 95%, sticks with overloaded lashings and
+  sticks lashed to any rod the skin pushes past its strength. Skin sticks are tagged `bk: 'skin'`. Designs saved before
+  the skin take its direction from their clad baskets (`b.clad`, `b.cladDir`).
+- Layouts live in `SF.Basket.LAYOUTS`; `pair` (two pointed baskets under one skin) is the first visit.
+  `test/t_baskets.js` checks every layout settles inside its strength with nothing bent beyond the tested limits.
+- Free rings (`meta.free`, `cladNet`, `sweep`, `ringOps`, `freeChecks`) are still built for designs that have them, but
+  the tools that placed them were taken out: every ring now belongs to a basket.
 - `findCircles` is a plain Hough transform on a greyscale array; it runs in Node, so test it there.
 
 ## Growth (`40_grow.js`, from Stickfield)

@@ -7,12 +7,16 @@ SF.Basket = (function () {
   const TAU = Math.PI * 2;
   // what the bending tests found (CEPT, Nov 2026): the tightest ring is a 3.6-3.7 m pole bent to 1.17 m across, the
   // biggest bent so far is 4.5 m round, and a 5 m pole makes a 1.6 m ring. A 20 mm pole soaked bends to 587 mm radius.
-  const LIMITS = { cMin: 3.7, cTested: 4.5, cMax: 5.0, pole: 5.0, minLap: 0.25, soakR: 0.587, stick: 5.0 };
+  // No upper size: a ring bigger than one 5 m pole is spliced from several (each splice a 0.5 m bolted lap), and the
+  // checks say how hard it is to bend and lift by hand. cMax only bounds the sliders.
+  const LIMITS = { cMin: Math.PI * 1.2, cTested: 4.5, cMax: 18, pole: 5.0, minLap: 0.25, spliceLap: 0.5, soakR: 0.587, stick: 5.0, maxRings: 30 };
+  // poles a ring takes: one if it laps within a 5 m pole, otherwise as many as the splices need
+  const ringPoles = (C) => (C + LIMITS.minLap <= LIMITS.pole ? 1 : Math.ceil((C + LIMITS.minLap) / (LIMITS.pole - LIMITS.spliceLap)));
   // what is in the yard; editable in the Baskets panel and saved with the design
   function stock() { return { poles: 140, uncut: 15, sticks: 900, thin: 1500, bolts: 400, clamps: 20 }; }
   function opts() {
     return { rings: 4, gap: 0.55, shape: 'barrel', lean: 0, az: 0, brace: 'lattice', spacing: 0.5, tops: 0.6, door: false, doorAz: 270, ground: 'pegged', strike: 'each', ties: true, seed: 3,
-      twist: 0, tilt: 0, drift: 0, tiltMode: 'same',
+      twist: 0, tilt: 0, drift: 0, tiltMode: 'same', top: 'open',
       clad: false, cladDir: 'random', cladDensity: 5, cladAngle: 55, cladLen: 2.8, cladReach: 0.5 };
   }
   const SHAPES = [['barrel', 'Barrel'], ['taper', 'Taper'], ['flare', 'Flare'], ['straight', 'Straight'], ['wave', 'Wave']];
@@ -32,7 +36,7 @@ SF.Basket = (function () {
   // (towards a direction that turns by the twist at every ring) and the centres can drift round a widening helix;
   // b.ringEdits[k] moves, resizes and tips one ring on its own
   function rings(b) {
-    const n = Math.max(1, Math.min(9, Math.round(b.rings || 4))); const C0 = clampC(b.C || 4.4); const out = [];
+    const n = Math.max(1, Math.min(LIMITS.maxRings, Math.round(b.rings || 4))); const C0 = clampC(b.C || 4.4); const out = [];
     const lean = (b.lean || 0) * DEG, az = (b.az || 0) * DEG; const dir = [Math.cos(az), 0, Math.sin(az)];
     const twist = (b.twist || 0) * DEG, tilt = (b.tilt || 0) * DEG, drift = b.drift || 0; const edits = b.ringEdits || {};
     const y0 = b.y0 != null ? b.y0 : b.ground === 'staked' ? 0.3 : 0.03;
@@ -105,6 +109,11 @@ SF.Basket = (function () {
     const base = addRing(R[0], b.ground === 'staked');
     if (b.ground !== 'staked') { const n = ringRods[0].n; base.fix = [0, 1, 2, 3].map((q) => { const i = Math.round(q * n / 4) % n; return { i, p: base.pts[i].slice() }; }); for (const f of base.fix) { f.p[1] = Math.max(0.01, f.p[1]); } }
     // 2. each ring above goes up on its formwork, then is braced to the one below
+    // the stack's top: sticks run on past the last ring and gather to a point (top 'point'), or flare out (tops)
+    const Rt = R[R.length - 1]; const apexH = b.apex != null ? b.apex : 0.6 + 0.9 * Rt.C / TAU; const apex = M.add(Rt.c, M.mul(Rt.n, apexH));
+    const toApex = (Q) => { const last = Q[Q.length - 1]; const mid = M.lerp3(last, apex, 0.55); const rad = M.sub(mid, M.add(Rt.c, M.mul(Rt.n, apexH * 0.55))); const lr = M.len(rad);
+      Q.push(M.add(mid, lr > 1e-6 ? M.mul(rad, 0.25) : [0, 0, 0])); Q.push(apex); return Q; };
+    const crown = [];
     const ext = (i) => (b.tops || 0) * (0.35 + 0.65 * rnd()) * (0.6 + 0.4 * Math.cos(off0 + i * D - (b.az || 0) * Math.PI / 180));
     if (b.brace === 'diagonal') {
       for (let k = 1; k < R.length; k++) {
@@ -118,7 +127,8 @@ SF.Basket = (function () {
         }
       }
       // the top ring gets short crown sticks when there are tops
-      if (b.tops > 0) { stage = Mo.nextStage(m); const k = R.length - 1; for (let i = 0; i < N; i += 2) { const th = off0 + i * D; const p = ringPoint(R[k], th); const p2 = ringPoint(R[k - 1] || R[k], th); const d = M.norm(M.sub(p, p2)); const e = ext(i); if (e < 0.15) continue; stick([M.sub(p, M.mul(d, 0.25)), p, M.add(p, M.mul(d, e))], 'stake', [{ p, k, th }]); } }
+      if (b.top === 'point') { stage = Mo.nextStage(m); const k = R.length - 1; for (let i = 0; i < N; i += 2) { const th = off0 + i * D; const p = ringPoint(R[k], th); const p2 = ringPoint(R[k - 1] || R[k], th); const Q = toApex([M.sub(p, M.mul(M.norm(M.sub(p, p2)), 0.25)), p]); const sr = stick(Q, 'stake', [{ p, k, th }]); if (sr) crown.push(sr); } }
+      else if (b.tops > 0) { stage = Mo.nextStage(m); const k = R.length - 1; for (let i = 0; i < N; i += 2) { const th = off0 + i * D; const p = ringPoint(R[k], th); const p2 = ringPoint(R[k - 1] || R[k], th); const d = M.norm(M.sub(p, p2)); const e = ext(i); if (e < 0.15) continue; stick([M.sub(p, M.mul(d, 0.25)), p, M.add(p, M.mul(d, e))], 'stake', [{ p, k, th }]); } }
     } else {
       // rings first (each its own stage on the formwork), then the long sticks through all of them
       for (let k = 1; k < R.length; k++) { stage = Mo.nextStage(m); addRing(R[k], true); }
@@ -144,13 +154,17 @@ SF.Basket = (function () {
           runs.push(cur);
           runs.forEach((run, ri) => {
             if (run.length < 2) return; const Q = run.map((x) => x.p); const ground = ri === 0 && b.ground === 'staked' && !door; if (ground) Q.unshift([Q[0][0], 0, Q[0][2]]);
-            if (ri === runs.length - 1) { const last = Q[Q.length - 1], prev = Q[Q.length - 2]; const e = ext(i * 2 + (sgn < 0 ? 1 : 0)); if (e > 0.1) Q.push(M.add(last, M.mul(M.norm(M.sub(last, prev)), e))); }
-            stick(Q, 'stake', run, ground);
+            if (ri === runs.length - 1 && b.top === 'point' && run[run.length - 1].k === R.length - 1) toApex(Q);
+            else if (ri === runs.length - 1) { const last = Q[Q.length - 1], prev = Q[Q.length - 2]; const e = ext(i * 2 + (sgn < 0 ? 1 : 0)); if (e > 0.1) Q.push(M.add(last, M.mul(M.norm(M.sub(last, prev)), e))); }
+            const sr = stick(Q, 'stake', run, ground); if (sr && b.top === 'point' && ri === runs.length - 1 && run[run.length - 1].k === R.length - 1) crown.push(sr);
           });
         }
       }
     }
     // 3. the formwork comes out: the basket stands on its own
+    // the point: the sticks' ends bound together in pairs round the crown, and each to the one opposite
+    if (crown.length > 1) { const ends = crown.map((r) => r.pts.length - 1); for (let i = 0; i < crown.length; i++) { const j = (i + 1) % crown.length; Mo.addJoint(m, crown[i].id, ends[i], crown[j].id, ends[j], stage, { wraps: 2 }); }
+      if (crown.length > 3) { const h2 = crown.length >> 1; for (let i = 0; i < h2; i++) Mo.addJoint(m, crown[i].id, ends[i], crown[i + h2].id, ends[i + h2], stage, { wraps: 2 }); } }
     if (b.strike !== 'end') { stage = Mo.nextStage(m); Mo.release(m, stage, new Set(out.map((r) => r.id))); }
     return out;
   }
@@ -387,9 +401,112 @@ SF.Basket = (function () {
   function loopTunnel() { let k = 0; const id = () => 'F' + (++k); return sweep([-3, 0.7, 0], [3, 0.7, 0], { count: 14, lift: 0.5, coil: 0.2, turns: 1, tip: 80, twist: 240, size: 'swell', C: 4.4 }, id); }
   function canopy() { let k = 0; const id = () => 'F' + (++k); return sweep([-2.6, 0.6, -1.4], [2.4, 0.6, 1.2], { count: 8, lift: 1.4, coil: 0, tip: 80, twist: 160, size: 'swell', C: 4.6 }, id).concat(sweep([-2.2, 0.6, 1.8], [2.2, 0.6, -1.6], { count: 7, lift: 1.2, coil: 0.3, tip: 65, twist: -180, size: 'pulse', C: 4.2 }, id)); }
   const FREE_LAYOUTS = [['tunnel', 'Looping tunnel: rings swept along an arch, twisting', loopTunnel], ['canopy', 'Canopy: two sweeps of rings crossing', canopy]];
+  // ---------------------------------------------------------------- one skin of cladding over the whole structure
+  function skinOpts() { return { on: true, dir: 'flow', density: 10, len: 2.4, angle: 55, reach: 0.4, blend: 0.2, seed: 5 }; }
+  // each basket as it stands: its settled rings in order (and its point), the surface ruled between them
+  function shapes(m, baskets) {
+    const out = [];
+    for (const b of baskets) {
+      const rr = Array.from(m.rods.values()).filter((r) => r.bk === b.id && r.kind === 'ring').sort((p, q) => (p.rk || 0) - (q.rk || 0)); if (!rr.length) continue;
+      const ax = rr.map((r) => { const n = r.pts.length; const c = r.pts.reduce((a, p) => M.add(a, p), [0, 0, 0]).map((v) => v / n); const q = r.pts.map((p) => M.sub(p, c)); return { c, q, r: q.reduce((a, v) => a + M.len(v), 0) / n }; });
+      let point = false;
+      if (b.top === 'point') { const R = rings(b); const Rt = R[R.length - 1]; const h = b.apex != null ? b.apex : 0.6 + 0.9 * Rt.C / TAU; const top = ax[ax.length - 1]; ax.push({ c: M.add(top.c, M.mul(Rt.n, h)), q: null, r: 0 }); point = true; }
+      if (ax.length === 1) ax.push({ c: M.add(ax[0].c, [0, 0.4, 0]), q: ax[0].q, r: ax[0].r });
+      out.push({ id: b.id, ax, point });
+    }
+    return out;
+  }
+  // where a ring meets the half-plane from its centre in direction e (about the axis): between the two nodes either side
+  function ringReach(R, e, axis) {
+    if (!R.q) return [0, 0, 0]; const q = R.q, n = q.length; let best = null, bc = -2;
+    const ang = (v) => Math.atan2(M.dot(M.cross(e, v), axis), M.dot(e, v));
+    for (let i = 0; i < n; i++) { const c = M.dot(q[i], e) / Math.max(1e-9, M.len(q[i])); if (c > bc) { bc = c; best = i; } }
+    const a0 = ang(q[best]); const j = a0 > 0 ? (best - 1 + n) % n : (best + 1) % n; const a1 = ang(q[j]);
+    const t = Math.abs(a1 - a0) > 1e-9 ? M.clamp(a0 / (a0 - a1), 0, 1) : 0; return M.lerp3(q[best], q[j], t);
+  }
+  // signed distance (roughly) to one basket's ruled surface, negative inside, and whether the nearest place is past its
+  // open top or below its base
+  function sdBasket(sh, p) {
+    let best = Infinity, past = false; const ax = sh.ax;
+    for (let k = 0; k < ax.length - 1; k++) {
+      const A = ax[k].c, B = ax[k + 1].c; const ab = M.sub(B, A); const L2 = Math.max(1e-9, M.dot(ab, ab)); const raw = M.dot(M.sub(p, A), ab) / L2; const t = M.clamp(raw, 0, 1);
+      const axis = M.norm(ab); const o = M.add(A, M.mul(ab, t)); let e = M.sub(p, o); e = M.sub(e, M.mul(axis, M.dot(e, axis))); const le = M.len(e);
+      if (le < 1e-6) { const d = -(ax[k].r + (ax[k + 1].r - ax[k].r) * t); if (Math.abs(d) < Math.abs(best)) { best = d; past = false; } continue; }
+      e = M.mul(e, 1 / le); const S = M.lerp3(M.add(A, ringReach(ax[k], e, axis)), M.add(B, ringReach(ax[k + 1], e, axis)), t);
+      const d = (M.dot(M.sub(p, S), e) >= 0 ? 1 : -1) * M.dist(p, S);
+      if (Math.abs(d) < Math.abs(best)) { best = d; past = (k === ax.length - 2 && raw > 1.02 && !sh.point) || (k === 0 && raw < -0.02); }
+    }
+    return { d: best, past };
+  }
+  // the whole structure's surface: a smooth union of the baskets, so the skin runs across where pods meet
+  function sdAll(shs, p, k) {
+    let acc = 0, past = false, dmin = Infinity;
+    for (const sh of shs) { const q = sdBasket(sh, p); acc += Math.exp(-q.d / k); if (q.d < dmin) { dmin = q.d; past = q.past; } }
+    return { d: -k * Math.log(Math.max(1e-300, acc)), past };
+  }
+  // a cladding stick from points: smoothed, lashed where it passes the structure (three lashings, four if pre-bent),
+  // laid onto those lashings, classed cold or soaked, or left off if it would crack or bend too tight
+  function finishStick(m, P, grid, stage, bk) {
+    const mat = m.material; const cs = 0.35; const key = (x, y, z) => x + ',' + y + ',' + z;
+    for (let it = 0; it < 10; it++) for (let i = 1; i < P.length - 1; i++) P[i] = M.lerp3(P[i], M.lerp3(P[i - 1], P[i + 1], 0.5), 0.5);
+    const Lp = Mo.polyLen(P, false); if (Lp < 0.8) return null; const nn = Mo.segCount(Lp, mat) + 1; const pts = Mo.resample(P, nn, false);
+    const cand = [];
+    for (let i = 0; i < nn - 1; i++) { const ci = M.lerp3(pts[i], pts[i + 1], 0.5).map((v) => Math.floor(v / cs));
+      for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) for (const sg of grid.get(key(ci[0] + x, ci[1] + y, ci[2] + z)) || []) { const g = segSeg(pts[i], pts[i + 1], sg.a, sg.c); if (g.d < 0.11) cand.push({ i, s: g.s, rod: sg.r.id, j: sg.j, t: g.t, d: g.d, at: (i + g.s) * Lp / (nn - 1) }); } }
+    cand.sort((x, y) => x.d - y.d); const ties = []; for (const c of cand) { if (ties.some((t) => Math.abs(t.at - c.at) < 0.35)) continue; ties.push(c); if (ties.length >= 6) break; }
+    if (ties.length < 3) return null;
+    { const sh = pts.map(() => [0, 0, 0]); const ws = pts.map(() => 0); const step = Lp / (nn - 1);
+      for (const t of ties) { const R0 = m.rods.get(t.rod); const n0 = R0.pts.length; const dl = M.sub(M.lerp3(R0.pts[t.j], R0.pts[(t.j + 1) % n0], t.t), M.lerp3(pts[t.i], pts[t.i + 1], t.s));
+        pts.forEach((q, i) => { const w = Math.exp(-(((i - t.i - t.s) * step / 0.45) ** 2)); sh[i] = M.add(sh[i], M.mul(dl, w)); ws[i] += w; }); }
+      for (let i = 0; i < nn; i++) if (ws[i] > 0) pts[i] = M.add(pts[i], M.mul(sh[i], 1 / Math.max(1, ws[i]))); }
+    const el = mat.elastic_strain || 0.004; const strain = maxCurv(pts) * SF.Phys.sectionOf(mat, { profile: 'clad' }).c1 * 1.15;
+    const A0 = pts[0], B0 = pts[nn - 1]; const ab = M.sub(B0, A0); const sag = Math.max(...pts.map((v) => { const t = M.clamp(M.dot(M.sub(v, A0), ab) / Math.max(1e-9, M.dot(ab, ab)), 0, 1); return M.dist(v, M.add(A0, M.mul(ab, t))); }));
+    const soak = strain > 0.5 * el && sag > 0.04; if (!soak && strain > 0.5 * el) return null; if (soak && (ties.length < 4 || Lp < 1.3)) return null; if (strain > (mat.soak_strain || 0.017)) return null;
+    const rod = Mo.makeRod(m, 'clad', pts, Lp, stage, false, Object.assign({ profile: 'clad', cls: soak ? 'soak' : 'cold' }, soak ? { rest: pts } : {})); rod.bk = bk; rod.part = 'clad';
+    for (const t of ties) Mo.addJoint(m, rod.id, t.i, t.rod, t.j, stage, Object.assign({}, t.s > 0.001 ? { ta: Math.round(t.s * 1000) / 1000 } : {}, t.t > 0.001 ? { tb: Math.round(t.t * 1000) / 1000 } : {}));
+    return rod;
+  }
+  // the skin: thin sticks marched over the whole structure's surface (the smooth union of its baskets) in one direction
+  // field, so they run on from pod to pod, never into the space inside where pods overlap; laid on in height bands
+  function skin(m, baskets, so, stage) {
+    const shs = shapes(m, baskets); if (!shs.length) return []; const k = Math.max(0.03, so.blend || 0.2); const rnd = M.rng((so.seed || 5) * 7919 + 11);
+    const F = (p) => sdAll(shs, p, k); const grad = (p) => { const e = 0.01; return M.norm([F(M.add(p, [e, 0, 0])).d - F(M.add(p, [-e, 0, 0])).d, F(M.add(p, [0, e, 0])).d - F(M.add(p, [0, -e, 0])).d, F(M.add(p, [0, 0, e])).d - F(M.add(p, [0, 0, -e])).d]); };
+    const onto = (p) => { for (let i = 0; i < 3; i++) { const f = F(p).d; if (Math.abs(f) < 0.003) break; p = M.sub(p, M.mul(grad(p), f)); } return p; };
+    const cs = 0.35; const grid = new Map(); const key = (x, y, z) => x + ',' + y + ',' + z;
+    for (const r of m.rods.values()) { if (r.kind === 'clad' || !r.bk) continue; const n = r.pts.length; const segs = r.closed ? n : n - 1; for (let j = 0; j < segs; j++) { const a = r.pts[j], c = r.pts[(j + 1) % n]; const g = key(...M.lerp3(a, c, 0.5).map((v) => Math.floor(v / cs))); let l = grid.get(g); if (!l) grid.set(g, l = []); l.push({ r, j, a, c }); } }
+    let ymax = 0; for (const sh of shs) for (const a of sh.ax) ymax = Math.max(ymax, a.c[1]);
+    const area = shs.reduce((a, sh) => { let s2 = 0; for (let i = 0; i < sh.ax.length - 1; i++) s2 += Math.PI * (sh.ax[i].r + sh.ax[i + 1].r) * M.dist(sh.ax[i].c, sh.ax[i + 1].c); return a + s2; }, 0);
+    const count = Math.max(10, Math.round((so.density || 10) * area)); const maxA = (so.angle || 55) * DEG; const dir = so.dir || 'flow';
+    const field = (p, n, a0, hand) => { let up = M.sub([0, 1, 0], M.mul(n, n[1])); if (M.len(up) < 0.15) up = M.sub([1, 0, 0], M.mul(n, n[0])); up = M.norm(up); const ar = M.norm(M.cross(n, up));
+      let a; switch (dir) { case 'rings': a = Math.PI / 2; break; case 'rise': a = 0; break; case 'twist': a = hand * 40 * DEG; break; case 'flow': a = hand * (12 + 75 * M.clamp(p[1] / Math.max(0.5, ymax), 0, 1) ** 1.3) * DEG; break; default: a = 0; }
+      a += a0; return M.add(M.mul(up, Math.cos(a)), M.mul(ar, Math.sin(a))); };
+    const bands = [];
+    for (let q = 0; q < count; q++) {
+      const sh = shs[Math.floor(rnd() * shs.length)]; const kk = rnd() * (sh.ax.length - 1); const k0 = Math.min(sh.ax.length - 2, Math.floor(kk)); const f = kk - k0;
+      const A = sh.ax[k0], Bq = sh.ax[k0 + 1]; const axis = M.norm(M.sub(Bq.c, A.c)); const { u, w } = basis(axis); const th = TAU * rnd(); const e = M.add(M.mul(u, Math.cos(th)), M.mul(w, Math.sin(th)));
+      const p0 = M.lerp3(M.add(A.c, ringReach(A, e, axis)), M.add(Bq.c, ringReach(Bq, e, axis)), f);
+      if (shs.some((o2) => o2 !== sh && sdBasket(o2, p0).d < -0.04)) continue; // inside another pod: no cladding there
+      let p = onto(p0); if (M.dist(p, p0) > 0.4 || p[1] < 0.05) continue; // inside another pod: no cladding there
+      const hand = (sh.id.charCodeAt(1) + q) % 2 ? 1 : -1; const a0 = dir === 'random' ? (rnd() - 0.5) * 2 * maxA : (rnd() - 0.5) * 0.35 * maxA; const L = (so.len || 2.4) * (0.6 + 0.8 * rnd());
+      const half = (sg) => { const P = []; let pp = p, d = null, s = 0;
+        while (s < L / 2) { const n = grad(pp); let v = field(pp, n, a0, hand); v = M.mul(v, sg); if (d && M.dot(v, d) < 0) v = M.mul(v, -1); d = d ? M.norm(M.add(M.mul(d, 0.7), M.mul(v, 0.3))) : v;
+          let nx = onto(M.add(pp, M.mul(d, 0.08))); const st = F(nx); if (st.past || nx[1] < 0.03) { if (P.length > 2 && (so.reach || 0) > 0 && nx[1] > 0.03) P.push(M.add(pp, M.mul(d, (so.reach || 0) * rnd()))); break; }
+          P.push(nx); pp = nx; s += 0.08; }
+        return P; };
+      const P = half(-1).reverse().concat([p], half(1)); if (P.length < 8) continue;
+      bands.push({ P, y: P.reduce((a, v) => a + v[1], 0) / P.length });
+    }
+    // laid on in bands of 0.7 m, bottom up
+    bands.sort((a, b2) => a.y - b2.y); const out = []; let band = -1;
+    for (const c of bands) { const bi = Math.floor(c.y / 0.7); if (bi !== band) { if (band >= 0) stage = Mo.nextStage(m); band = bi; } const r = finishStick(m, c.P, grid, stage, 'skin'); if (r) out.push(r); }
+    if (out.length) Mo.autoJoin(m, out.map((r) => r.id), { radius: 0.06, perRod: 3, spacing: 0.6, perPair: 1 }, stage);
+    return out;
+  }
   // the whole pile: every basket in order, each built and struck, then bolted together; then the cladding goes on
   function buildAll(m, baskets, o, s, free) {
     free = (free || m.meta.free || []).map((f) => Object.assign({}, f)); const net = Object.assign(netOpts(), m.meta.net || {}, o && o.net);
+    // the skin's settings: kept in the model; designs from before it take theirs from their clad baskets
+    const legacy = !m.meta.skin && (baskets || []).find((b) => b.clad); const skinRead = Object.assign(skinOpts(), legacy ? { dir: legacy.cladDir || 'flow' } : !m.meta.skin && !(o && o.skin) ? { on: false } : {}, m.meta.skin || {}, o && o.skin);
     clear(m); const bs = (baskets || []).map((b) => Object.assign({}, b)); m.meta.baskets = JSON.parse(JSON.stringify(bs)); m.meta.free = JSON.parse(JSON.stringify(free)); m.meta.net = net; o = Object.assign(opts(), o || {}); let stage = s; const out = [];
     bs.forEach((b, i) => { if (i > 0) stage = Mo.nextStage(m); out.push(...build(m, Object.assign(b, { strike: o.strike, ties: o.ties }), stage)); stage = m.meta.stage; });
     if (o.strike === 'end') { stage = Mo.nextStage(m); Mo.release(m, stage, new Set(out.map((r) => r.id))); }
@@ -405,10 +522,21 @@ SF.Basket = (function () {
         const g = new Set(gone); out.push(...cn.filter((r) => !g.has(r.id)));
       }
     }
-    if (bs.some((b) => b.clad)) settle(m, 500);
-    // cladding, basket by basket, on the standing pile; where cladding sticks cross each other or a neighbour, lashed
-    const cl = []; for (const b of bs) if (b.clad) { stage = Mo.nextStage(m); const r = clad(m, b, o, stage); cl.push(...r); out.push(...r); stage = m.meta.stage; }
-    if (cl.length) Mo.autoJoin(m, cl.map((r) => r.id), { radius: 0.06, perRod: 3, spacing: 0.6, perPair: 1 }, stage);
+    // one skin of cladding over the whole structure, laid on it as it stands; sticks it would overload are left off
+    const sk = m.meta.skin = skinRead;
+    if (sk.on && bs.length) {
+      settle(m, 600); stage = Mo.nextStage(m); const cl = skin(m, bs, sk, stage); stage = m.meta.stage; const g = new Set();
+      // up to three passes: sticks over 95%, sticks whose lashings are overloaded, and the sticks lashed to any rod the
+      // skin pushes past its strength come off
+      for (let pass = 0; pass < 3; pass++) {
+        const sim = SF.Phys.build(m); SF.Phys.relax(sim, { budgetMs: 900 }); const st = SF.Phys.stress(sim); const gone = new Set(); const over = new Set();
+        sim.rods.forEach((r, k) => { if (r.kind === 'clad' && r.bk === 'skin') { if (st.rodMax[k] > 0.95) gone.add(r.id); } else if (st.rodMax[k] > 0.98) over.add(r.id); });
+        sim.jointIds.forEach((id, q) => { if (sim.jointF[q] <= sim.jointCap[q]) return; const j = m.joints.find((x) => x.id === id); if (!j) return; for (const e of [j.a, j.b]) { const rr = m.rods.get(e); if (rr && rr.bk === 'skin') gone.add(e); } });
+        if (over.size) for (const j of m.joints) { const ra = m.rods.get(j.a), rb = m.rods.get(j.b); if (!ra || !rb) continue; if (ra.bk === 'skin' && over.has(j.b)) gone.add(j.a); if (rb.bk === 'skin' && over.has(j.a)) gone.add(j.b); }
+        if (!gone.size) break; Mo.remove(m, Array.from(gone)); gone.forEach((id) => g.add(id));
+      }
+      out.push(...cl.filter((r) => !g.has(r.id)));
+    }
     return out;
   }
   // take the baskets out of the model (other rods stay)
@@ -420,7 +548,7 @@ SF.Basket = (function () {
   function make(design, x, z, C) {
     const o = Object.assign(opts(), design.basketOpts || {}); const ids = (design.baskets || []).map((b) => parseInt(String(b.id).slice(1), 10) || 0);
     return { id: 'B' + (Math.max(0, ...ids) + 1), x: Math.round(x * 1000) / 1000, z: Math.round(z * 1000) / 1000, C: clampC(C || 4.4), rings: o.rings, gap: o.gap, shape: o.shape, lean: o.lean, az: o.az,
-      brace: o.brace, spacing: o.spacing, tops: o.tops, door: o.door, doorAz: o.doorAz, ground: o.ground, strike: o.strike, seed: o.seed, clad: !!o.clad,
+      brace: o.brace, spacing: o.spacing, tops: o.tops, door: o.door, doorAz: o.doorAz, ground: o.ground, strike: o.strike, seed: o.seed, clad: !!o.clad, top: o.top || 'open', apex: o.apex != null ? o.apex : undefined,
       twist: o.twist, tilt: o.tilt, drift: o.drift, tiltMode: o.tiltMode, cladDir: o.cladDir };
   }
   // the notebook plan (Nov 2026): six baskets round a big one, stacked to different heights, clad all over
@@ -465,7 +593,13 @@ SF.Basket = (function () {
       out.push(spec(design, i, [r * Math.cos(a), r * Math.sin(a), C, Math.max(2, 6 - Math.floor(i / 1.5)), 0.5, i % 2 ? 'taper' : 'barrel', 5 + i, a * 180 / Math.PI + 90, 25 + 5 * i, 16 + 2 * i, 0.15, 'same', i % 3 === 1 ? 'diagonal' : 'lattice', i % 2 ? 'flow' : 'rings', 0.3])); }
     return out;
   }
-  const LAYOUTS = [['swirl', 'Swirling tower: rings tipping round, clad along them', swirl], ['bloom', 'Overlapping bloom: five stacks fanning out', bloom], ['flame', 'Leaning flame: cladding rising', flame],
+  // two pointed baskets side by side under one skin (the sketch: two basket forms, one cohesive structure)
+  function pair(design) {
+    design = design || {};
+    return [[-0.95, 0, 6.0, 5, 0.5, 'taper', 4, 0, 10, 6, 0.05, 'same', 'stakes', 'flow', 0], [0.7, 0.2, 5.0, 4, 0.5, 'taper', 6, 180, -10, 6, 0.05, 'same', 'stakes', 'flow', 0]]
+      .map((a, i) => Object.assign(spec(design, i, a), { top: 'point', apex: 1.3 - 0.2 * i, spacing: 0.4 }));
+  }
+  const LAYOUTS = [['pair', 'Two pointed pods, one skin (your sketch)', pair], ['swirl', 'Swirling tower: rings tipping round, clad along them', swirl], ['bloom', 'Overlapping bloom: five stacks fanning out', bloom], ['flame', 'Leaning flame: cladding rising', flame],
     ['crossed', 'Crossing baskets: two stacks leaning into each other', crossed], ['golden', 'Golden spiral: six baskets turning', golden], ['notebook', 'Notebook plan: six baskets, clad', notebook], ['pile', 'Pile of seven baskets', pile]];
   // the pile from the plan sketch: rings of different sizes scattered and touching, some leaning
   function pile(design) {
@@ -481,7 +615,7 @@ SF.Basket = (function () {
     const st = Object.assign(stock(), design && design.stock); const rings = [], sticks = [], thin = []; let bolts = 0, splices = 0, lashes = 0;
     for (const r of model.rods.values()) { if (r.kind === 'ring') rings.push(r.L); else if (r.kind === 'stake' || r.kind === 'brace' || r.kind === 'stick') sticks.push(r.L); else if (r.kind === 'clad') thin.push(r.L); }
     for (const e of model.meta.events || []) for (const r of e.struck) if (r.kind === 'ring') rings.push(r.L);
-    for (const L of rings) { if (LIMITS.pole - L < LIMITS.minLap) splices++; bolts += 2; }
+    let poleCount = 0; for (const L of rings) { const k = ringPoles(L); poleCount += k; splices += k > 1 ? k : 0; bolts += 2 * Math.max(1, k); }
     for (const j of model.joints) { if (j.type === 'bolt') bolts++; else lashes++; }
     // sticks longer than stock are spliced from two; the rest packed first-fit into 5 m lengths
     const pack = (list) => { const pieces = []; for (const L of list) { let l = L; while (l > LIMITS.stick) { pieces.push(LIMITS.stick); l -= LIMITS.stick - 0.3; } pieces.push(l); }
@@ -489,7 +623,7 @@ SF.Basket = (function () {
     const { pieces, bins } = pack(sticks); const tp = pack(thin); const thinLen = thin.reduce((a, b) => a + b, 0);
     const poles = rings.length; const stickLen = sticks.reduce((a, b) => a + b, 0);
     const rows = [
-      { what: 'Rings (5 m poles, 18-20 mm)', need: poles + splices, have: st.poles, unit: 'poles', note: splices ? splices + ' rings need a splice piece: too big to lap a 5 m pole' : 'one pole per ring, lapped and bolted' },
+      { what: 'Rings (5 m poles, 18-20 mm)', need: poleCount, have: st.poles, unit: 'poles', note: splices ? splices + ' splices: rings bigger than one 5 m pole are made of several, each lap bolted twice' : 'one pole per ring, lapped and bolted' },
       { what: 'Sticks (20 × 20 mm, 5 m)', need: bins.length, have: st.sticks, unit: 'sticks', note: stickLen.toFixed(0) + ' m of sticks in ' + pieces.length + ' pieces' },
       { what: 'Thin sticks (10 × 20 mm, 5 m)', need: tp.bins.length, have: st.thin, unit: 'sticks', note: thin.length ? thinLen.toFixed(0) + ' m of cladding in ' + tp.pieces.length + ' pieces, lashed at ' + lashes + ' places' : 'for cladding' },
       { what: 'Bolts (with big washers)', need: bolts, have: st.bolts, unit: 'bolts', note: 'two at each ring lap, one at each crossing' },
@@ -501,7 +635,18 @@ SF.Basket = (function () {
   function issues(model) {
     const out = [];
     for (const r of model.rods.values()) {
-      if (r.kind === 'ring') { if (r.L < LIMITS.cMin - 0.01 || r.L > LIMITS.cMax + 0.01) out.push({ id: r.id, level: 'crit', text: 'ring ' + r.L.toFixed(2) + ' m round: outside the 3.7-5.0 m that can be bent' }); else if (r.L > LIMITS.cTested + 0.01) out.push({ id: r.id, level: 'warn', text: 'ring ' + r.L.toFixed(2) + ' m round: bigger than the 4.5 m bent so far. Test one first' }); }
+      if (r.kind === 'ring') {
+        // what it takes to make and put up a ring of this size by hand
+        const D = r.L / Math.PI, k = ringPoles(r.L), top = Math.max(...r.pts.map((p) => p[1]));
+        if (r.L < LIMITS.cMin - 0.01) out.push({ id: r.id, level: 'crit', text: 'ring ' + D.toFixed(2) + ' m across: tighter than the 1.2 m a soaked pole bends to' });
+        else {
+          if (r.L > LIMITS.cTested + 0.01) out.push({ id: r.id, level: 'warn', text: 'ring ' + r.L.toFixed(1) + ' m round: bigger than the 4.5 m bent so far. Bend a test ring first' });
+          if (D > 3.5) out.push({ id: r.id, level: 'warn', text: 'ring ' + D.toFixed(1) + ' m across, ' + k + ' poles spliced: it sags under its own weight while it is bolted. Bend it on a formwork that size with six people, and prop it until it is braced' });
+          else if (D > 2.5) out.push({ id: r.id, level: 'warn', text: 'ring ' + D.toFixed(1) + ' m across, ' + k + ' poles spliced: bend it round a formwork that size with four people' });
+          else if (k > 1) out.push({ id: r.id, level: 'info', text: 'ring ' + r.L.toFixed(1) + ' m round: ' + k + ' poles spliced with bolted laps' });
+        }
+        if (top > 3.6) out.push({ id: r.id, level: 'warn', text: 'ring up to ' + top.toFixed(1) + ' m high: bolt it from a scaffold tower, not a ladder' });
+      }
       if ((r.kind === 'stake' || r.kind === 'brace') && r.pts.length > 2) {
         const kmax = maxCurv(r.pts);
         if (kmax > 1 / LIMITS.soakR) out.push({ id: r.id, level: 'crit', text: 'stick bent to ' + (1 / kmax).toFixed(2) + ' m radius: tighter than the 0.59 m a soaked 20 mm stick takes' });
@@ -544,11 +689,11 @@ SF.Basket = (function () {
   // cx, cy: the pixel at the origin (the circles' middle unless given)
   function fromCircles(design, circles, o) {
     o = o || {}; if (!circles.length) return { baskets: [], mpp: 0.01 }; const rMax = Math.max(...circles.map((c) => c.r));
-    const mpp = o.mpp || LIMITS.cMax / TAU / rMax; // metres per pixel
+    const mpp = o.mpp || LIMITS.pole / TAU / rMax; // metres per pixel
     const cx = o.cx != null ? o.cx : circles.reduce((a, c) => a + c.x, 0) / circles.length, cy = o.cy != null ? o.cy : circles.reduce((a, c) => a + c.y, 0) / circles.length;
     const bs = []; const temp = { baskets: [], basketOpts: design.basketOpts };
     circles.forEach((c, i) => { const b = make(temp, (c.x - cx) * mpp, (c.y - cy) * mpp, clampC(TAU * c.r * mpp)); b.id = 'B' + (i + 1); b.seed = 3 + i; temp.baskets.push(b); bs.push(b); });
     return { baskets: bs, mpp, cx, cy };
   }
-  return { LIMITS, SHAPES, BRACES, TILTS, CLAD_DIRS, LAYOUTS, FREE_LAYOUTS, netOpts, freeRing, buildFree, sweep, ringOps, freeChecks, cladNet, connectRing, surf, notebook, clad, stock, opts, rings, ringPoint, build, buildAll, tie, clear, make, pile, materials, issues, findCircles, fromCircles, clampC };
+  return { LIMITS, ringPoles, skinOpts, skin, shapes, sdBasket, pair, SHAPES, BRACES, TILTS, CLAD_DIRS, LAYOUTS, FREE_LAYOUTS, netOpts, freeRing, buildFree, sweep, ringOps, freeChecks, cladNet, connectRing, surf, notebook, clad, stock, opts, rings, ringPoint, build, buildAll, tie, clear, make, pile, materials, issues, findCircles, fromCircles, clampC };
 })();

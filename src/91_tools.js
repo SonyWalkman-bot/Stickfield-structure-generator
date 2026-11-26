@@ -25,9 +25,7 @@
   app.svgI = svgI;
   const TOOLS = app.TOOLS = {
     select: { label: 'Select', key: 'V', icon: 'select', tip: 'Inspect rods and lashings', steps: ['Click a rod or a lashing to inspect it. Shift-click adds to the selection; Delete removes it.'] },
-    ring: { label: 'Basket', key: 'B', icon: 'ring', tip: 'Set out a basket of stacked rings on the ground, or stack another ring on one', steps: ['Click the ground where the basket goes (on a sketch, its centre), or click a basket to stack a ring on it', 'Click again to size its base ring (3.7 to 5.0 m round)'] },
-    free: { label: 'Free ring', key: 'N', icon: 'free', tip: 'Place one ring any way up: standing on the ground, or through a point on another ring', steps: ['Click the ground to stand a ring there, or a ring to hang a new one through that point (Free rings sets its size, tip and facing)'] },
-    sweep: { label: 'Ring sweep', key: 'S', icon: 'sweep', tip: 'Sweep a run of rings between two places, arching, coiling and twisting', steps: ['Click where the sweep starts: the ground or a ring', 'Click where it ends: rings are swept between them'] },
+    ring: { label: 'Basket', key: 'B', icon: 'ring', tip: 'Set out a basket of stacked rings on the ground, or stack another ring on one', steps: ['Click the ground where the basket goes (on a sketch, its centre), or click a basket to stack a ring on it', 'Click again to size its base ring (at least 1.2 m across; over 1.6 m it is spliced from several poles)'] },
     arch: { label: 'Arch', key: 'A', icon: 'arch', tip: 'Spring a rod into an arch between two places', steps: ['Click where the arch starts: a point on a rod, or the ground', 'Click where it ends: the rod springs into an arch between them'] },
     loop: { label: 'Loop', key: 'L', icon: 'loop', tip: 'Stand a loop on a rod or the ground', steps: ['Click a rod or the ground to stand a loop there'] },
     hoop: { label: 'Hoop', key: 'O', icon: 'hoop', tip: 'Place a hoop: a ring round a point, or standing on the ground', steps: ['Click a rod to ring it with a hoop, or the ground to stand one there. It is lashed wherever it meets rods'] },
@@ -39,8 +37,8 @@
     remove: { label: 'Remove', key: 'X', icon: 'remove', tip: 'Remove a rod or a lashing', steps: ['Click a rod or a lashing to remove it'] }
   };
   app.TOOL_KEYS = {}; for (const id in TOOLS) app.TOOL_KEYS[TOOLS[id].key.toLowerCase()] = id;
-  const RAIL = ['select', '|', 'ring', 'free', 'sweep', '|', 'arch', 'loop', 'hoop', 'rod', 'weave', 'lash', '|', 'grow', 'pull', '|', 'remove'];
-  const EDITS = new Set(['ring', 'free', 'sweep', 'arch', 'loop', 'hoop', 'rod', 'weave', 'lash', 'grow', 'pull', 'remove']);
+  const RAIL = ['select', '|', 'ring', '|', 'arch', 'loop', 'hoop', 'rod', 'weave', 'lash', '|', 'grow', 'pull', '|', 'remove'];
+  const EDITS = new Set(['ring', 'arch', 'loop', 'hoop', 'rod', 'weave', 'lash', 'grow', 'pull', 'remove']);
 
   // ---------------------------------------------------------------- rail and hint bar
   app.buildRail = function () {

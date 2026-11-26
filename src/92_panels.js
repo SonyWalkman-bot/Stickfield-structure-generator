@@ -53,7 +53,7 @@
   }
   app.buildInspector = function () {
     const ins = $('#inspector'); const top = ins.scrollTop; ins.innerHTML = '';
-    ins.append(panel('tool', 'Tool', renderTool, 'toolpanel'), panel('sel', 'Selection', renderSel), panel('baskets', 'Baskets', (b, bd) => app.renderBaskets(b, bd)), panel('rings', 'Free rings', (b, bd) => app.renderFree(b, bd)), panel('start', 'Arches and formwork', renderStart), panel('grow', 'Grow', renderGrow),
+    ins.append(panel('tool', 'Tool', renderTool, 'toolpanel'), panel('sel', 'Selection', renderSel), panel('baskets', 'Baskets', (b, bd) => app.renderBaskets(b, bd)), panel('start', 'Arches and formwork', renderStart), panel('grow', 'Grow', renderGrow),
       panel('checks', 'Checks', renderChecks), panel('physics', 'Physics & materials', renderPhysics), panel('view', 'View', renderView));
     for (const k in panels) panels[k].render(); ins.scrollTop = top; app.renderSelection(); app.renderLegend();
   };
@@ -71,7 +71,7 @@
   app.renderFreePanel = () => { if (busy()) { app.pendingRefresh = true; return; } if (panels.rings) panels.rings.render(); };
   app.renderBasketPanel = () => { if (busy()) { app.pendingRefresh = true; return; } if (panels.baskets) panels.baskets.render(); };
   app.renderGrowPanel = () => { if (busy()) { app.pendingRefresh = true; return; } if (panels.grow) panels.grow.render(); };
-  app.refreshPanels = function () { if (busy()) { app.pendingRefresh = true; return; } for (const k of ['checks', 'start', 'baskets', 'rings']) if (panels[k]) panels[k].render(); app.renderSelection(); if (panels.grow) panels.grow.render(); app.updateStats(); };
+  app.refreshPanels = function () { if (busy()) { app.pendingRefresh = true; return; } for (const k of ['checks', 'start', 'baskets']) if (panels[k]) panels[k].render(); app.renderSelection(); if (panels.grow) panels.grow.render(); app.updateStats(); };
   app.updateStats = function () { const w = app.W; if (!w || !w.sim || !w.model.rods.size) { renderStats(null); return; } const S = SF.Checks.summary(w); renderStats(S); };
   // cheap refresh while the structure moves: only the numbers in the selection change, the panel is not rebuilt
   const selKey = () => Array.from(app.sel.rods).sort().join(',') + '|' + Array.from(app.sel.joints).sort().join(',');

@@ -21,7 +21,7 @@
     if (app.renderBasketPanel) app.renderBasketPanel(); return out;
   };
   // the pile is set by replacing the list in place
-  app.basketLayout = 'swirl';
+  app.basketLayout = 'pair';
   app.placeBasketLayout = function (id, quiet) { const L0 = B.LAYOUTS.find((x) => x[0] === id) || B.LAYOUTS[0]; return app.rebuildBaskets(quiet ? null : L0[1] + ': built ring by ring', (bs) => { bs.length = 0; bs.push(...L0[2](app.design)); }, quiet ? { toast: false } : {}); };
   // remove every rod, lashing and basket (undo brings them back)
   app.removeAll = async function () {
@@ -32,10 +32,26 @@
   };
   app.placePile = function (quiet) { return app.rebuildBaskets(quiet ? null : 'A pile of seven baskets, built ring by ring', (bs) => { bs.length = 0; bs.push(...B.pile(app.design)); }, quiet ? { toast: false } : {}); };
 
+  const TOPS = [['open', 'Open', 'The rings end at the top ring'], ['point', 'Pointed', 'The bracing carries on past the top ring and is bound together at a point']];
+  // the skin's settings as they stand, and a rebuild with some of them changed
+  const skinNow = () => Object.assign(B.skinOpts(), app.W.model.meta.skin || { on: (list()).some((q) => q.clad) });
+  function setSkin(patch, label) {
+    app.edit(label, (m, s) => { m.meta.skin = Object.assign(skinNow(), patch); return B.buildAll(m, JSON.parse(JSON.stringify(m.meta.baskets || [])), app.basketOpts(), s); });
+    app.renderBasketPanel();
+  }
+  app.setSkin = setSkin;
+  // add a ring above ring k of a basket (+1), or take ring k out (-1); one-ring edits move with their rings
+  function shiftRings(id, k, d) {
+    app.rebuildBaskets(d > 0 ? 'Ring added to ' + id : 'Ring taken out of ' + id, (bs) => {
+      const q = bs.find((x) => x.id === id); if (!q) return; if (d > 0 && q.rings >= L.maxRings) { app.toast(L.maxRings + ' rings is the most a basket takes here'); return; }
+      const e0 = q.ringEdits || {}; const e1 = {}; for (const key of Object.keys(e0)) { const i = +key; if (d < 0 && i === k) continue; e1[d > 0 ? (i > k ? i + 1 : i) : (i > k ? i - 1 : i)] = e0[key]; }
+      q.ringEdits = e1; q.rings = Math.max(1, q.rings + d); return { select: id, rk: d > 0 ? k + 1 : Math.max(0, k - 1) };
+    });
+  }
   // ---------------------------------------------------------------- the Basket tool
   function stackOn(id) {
     const b = list().find((q) => q.id === id); if (!b) return;
-    if ((b.rings || 1) >= 9) { app.toast('Nine rings is the most a basket takes here'); return; }
+    if ((b.rings || 1) >= L.maxRings) { app.toast(L.maxRings + ' rings is the most a basket takes here'); return; }
     app.rebuildBaskets('Ring stacked on ' + id + ': ' + ((b.rings || 1) + 1) + ' rings', (bs) => { const q = bs.find((x) => x.id === id); q.rings = (q.rings || 1) + 1; return { select: id, rk: q.rings - 1 }; });
   }
   function basketAt(p) { for (const b of list()) { const R = b.C / TAU; if (Math.hypot(p[0] - b.x, p[2] - b.z) < R * 0.9) return b; } return null; }
@@ -50,7 +66,7 @@
       ts.a = pk; app.renderHint(); app.toolPreview(); return;
     }
     const raw = sizeFrom(ts.a.p, pk.p); const C = B.clampC(raw); const c = ts.a.p; app.ts = {}; app.opt.ring.C = C; app.saveUI();
-    app.rebuildBaskets(null, (bs) => { const nb = B.make({ baskets: bs, basketOpts: app.basketOpts() }, c[0], c[2], C); bs.push(nb); app.toast('Basket ' + nb.id + ' set out: ' + nb.rings + ' rings on a ' + ringLabel(C) + ' base' + (Math.abs(raw - C) > 0.05 ? '. Sized into the 3.7-5.0 m that can be bent' : ''), 4200); return { select: nb.id, rk: 0 }; });
+    app.rebuildBaskets(null, (bs) => { const nb = B.make({ baskets: bs, basketOpts: app.basketOpts() }, c[0], c[2], C); bs.push(nb); app.toast('Basket ' + nb.id + ' set out: ' + nb.rings + ' rings on a ' + ringLabel(C) + ' base' + (raw < L.cMin - 0.05 ? '. Made 1.2 m across, the tightest a soaked pole bends' : C > L.pole - L.minLap ? '. It takes ' + B.ringPoles(C) + ' poles spliced together' : ''), 4200); return { select: nb.id, rk: 0 }; });
     app.toolPreview();
   };
   function ringLines(b) { return B.rings(b).map((r) => { const pts = []; for (let i = 0; i <= 40; i++) pts.push(B.ringPoint(r, TAU * i / 40)); return pts; }); }
@@ -58,7 +74,7 @@
     const ts = app.ts; const acc = app.colors['accent-fill']; const o = app.basketOpts();
     if (ts.a) {
       const raw = sizeFrom(ts.a.p, pk.p); const C = B.clampC(raw); const b = Object.assign(B.make({ baskets: [], basketOpts: o }, ts.a.p[0], ts.a.p[2], C));
-      V.setPreview(ringLines(b), acc); V.setMarks([]); ts.info = ringLabel(C) + (raw < L.cMin - 0.05 ? ' · the smallest ring that bends' : raw > L.cMax + 0.05 ? ' · the biggest a 5 m pole makes' : C > L.cTested ? ' · bigger than tested' : '');
+      V.setPreview(ringLines(b), acc); V.setMarks([]); ts.info = ringLabel(C) + (raw < L.cMin - 0.05 ? ' · the smallest ring that bends' : C > L.cTested ? ' · ' + B.ringPoles(C) + ' pole' + (B.ringPoles(C) > 1 ? 's spliced' : '') + ', bigger than tested' : '');
       app.dirty = true; return;
     }
     const rod = pk.kind === 'rod' ? app.W.model.rods.get(pk.rod) : null; const on = rod && rod.bk ? list().find((q) => q.id === rod.bk) : pk.kind === 'ground' ? basketAt(pk.p) : null;
@@ -121,18 +137,19 @@
         slider(s.plane === 'plan' ? 'Back' : 'Depth', { min: -15, max: 15, step: 0.05, get: () => s.cz, set: (v) => { s.cz = v; upd(); }, fmt: (v) => v.toFixed(2) + ' m' }),
         check('Show the sketch', () => s.show !== false, (v) => { s.show = v; upd(); }),
         h('div', { class: 'btns' }, s.plane === 'plan' ? btn('Find rings in the sketch', () => findRings(), 'primary', { disabled: seq || null }) : null, btn('Trace with the Basket tool', () => { app.setTool('ring'); V.view(s.plane === 'plan' ? 'top' : 'front'); }), btn('Replace…', () => file.click()), btn('Remove', () => { app.sketch = null; app.sketchImg = null; showSketch(); app.autosave(); app.renderBasketPanel(); })),
-        hint(s.plane === 'plan' ? 'Circles drawn in the plan become baskets. The sketch is scaled so its biggest circle is the biggest ring a 5 m pole makes (1.6 m across); circles smaller than the tightest ring (1.17 m) are made that size. Crop the picture to the plan first, and remove any extra baskets with the Remove tool.' : 'Trace over the elevation with the Basket tool from the front view; use it to judge heights and how many rings to stack.'));
+        hint(s.plane === 'plan' ? 'Circles drawn in the plan become baskets. The sketch is scaled so its biggest circle is the biggest ring one 5 m pole makes (1.6 m across); set <b>Width</b> to the real size if it is bigger. Circles smaller than the tightest ring (1.2 m across) are made that size. Crop the picture to the plan first, and remove any extra baskets with the Remove tool.' : 'Trace over the elevation with the Basket tool from the front view; use it to judge heights and how many rings to stack.'));
     }
     // defaults for new baskets
     add(b, h('h4', { class: 'sub', text: 'New baskets' }));
-    add(b, slider('Rings', { min: 1, max: 7, step: 1, get: () => o.rings, set: (v) => setOpt('rings', v) }),
+    add(b, slider('Rings', { min: 1, max: L.maxRings, step: 1, get: () => o.rings, set: (v) => setOpt('rings', v) }),
       slider('Ring spacing', { min: 0.3, max: 1, step: 0.05, get: () => o.gap, set: (v) => setOpt('gap', v), fmt: (v) => v.toFixed(2) + ' m' }),
       segRow('Profile', B.SHAPES, () => o.shape, (v) => setOpt('shape', v)),
       select('Bracing', B.BRACES.map((x) => [x[0], x[1]]), () => o.brace, (v) => { setOpt('brace', v); app.renderBasketPanel(); }),
       hint((B.BRACES.find((x) => x[0] === o.brace) || B.BRACES[0])[2] + '.'),
       slider('Stick spacing', { min: 0.25, max: 0.9, step: 0.05, get: () => o.spacing, set: (v) => setOpt('spacing', v), fmt: (v) => v.toFixed(2) + ' m' }),
       
-      slider('Tops', { min: 0, max: 1.5, step: 0.05, get: () => o.tops, set: (v) => setOpt('tops', v), fmt: (v) => (v ? 'up to ' + v.toFixed(2) + ' m' : 'none') }),
+      segRow('Top', TOPS, () => o.top || 'open', (v) => { setOpt('top', v); app.renderBasketPanel(); }),
+      o.top === 'point' ? hint('The bracing runs on past the top ring and the sticks are bound together at a point above it.') : slider('Tops', { min: 0, max: 1.5, step: 0.05, get: () => o.tops, set: (v) => setOpt('tops', v), fmt: (v) => (v ? 'up to ' + v.toFixed(2) + ' m' : 'none') }),
       segRow('Base', [['pegged', 'Pegged', 'The base ring sits on the ground, pegged at four points'], ['staked', 'Staked', 'Sticks run into the ground; the base ring is held up on them']], () => o.ground, (v) => setOpt('ground', v)),
       check('Leave a doorway in each', () => o.door, (v) => setOpt('door', v)),
       h('h4', { class: 'sub', text: 'Twist and overlap' }),
@@ -141,7 +158,7 @@
       segRow('Tipping', B.TILTS, () => o.tiltMode, (v) => setOpt('tiltMode', v)),
       slider('Drift', { min: 0, max: 1, step: 0.05, get: () => o.drift, set: (v) => setOpt('drift', v), fmt: (v) => (v ? v.toFixed(2) + ' m' : 'none') }),
       hint('Each ring above the base tips by <b>Ring tip</b> towards a direction that turns by <b>Twist</b> at every ring, and the centres drift round a widening spiral. Tipped rings cut through each other: they are bolted wherever they cross, as each one goes up.'));
-    add(b, h('div', { class: 'btns' }, btn('Apply to every basket', () => { if (!n) { app.toast('No baskets yet: use the Basket tool or a sketch'); return; } app.rebuildBaskets('Every basket rebuilt with these settings', (bs) => { for (const q of bs) Object.assign(q, { rings: o.rings, gap: o.gap, shape: o.shape, brace: o.brace, spacing: o.spacing, tops: o.tops, ground: o.ground, door: o.door, twist: o.twist, tilt: o.tilt, drift: o.drift, tiltMode: o.tiltMode }); delete q.ringEdits; }); }, '', { disabled: seq || null })));
+    add(b, h('div', { class: 'btns' }, btn('Apply to every basket', () => { if (!n) { app.toast('No baskets yet: use the Basket tool or a sketch'); return; } app.rebuildBaskets('Every basket rebuilt with these settings', (bs) => { for (const q of bs) Object.assign(q, { rings: o.rings, gap: o.gap, shape: o.shape, brace: o.brace, spacing: o.spacing, tops: o.tops, top: o.top || 'open', ground: o.ground, door: o.door, twist: o.twist, tilt: o.tilt, drift: o.drift, tiltMode: o.tiltMode }); delete q.ringEdits; }); }, '', { disabled: seq || null })));
     // build
     add(b, h('h4', { class: 'sub', text: 'Building it' }));
     add(b, segRow('Formwork out', [['each', 'After each basket', 'Each basket must stand on its own before the next is started'], ['end', 'At the end', 'Rings stay on their formwork until every basket is up and bolted together']], () => o.strike, (v) => { setOpt('strike', v); if (n) app.rebuildBaskets('Rebuilt: formwork out ' + (v === 'end' ? 'at the end' : 'after each basket')); }),
@@ -149,17 +166,19 @@
     add(b, app.ui.select('Layout', B.LAYOUTS.map((x) => [x[0], x[1]]), () => app.basketLayout, (v) => { app.basketLayout = v; }));
     add(b, h('div', { class: 'btns' }, btn(n ? 'Replace with this layout' : 'Build this layout', async () => { if (n && !(await app.confirm({ title: 'Replace the baskets?', text: 'The layout replaces the ' + n + ' baskets here; undo brings them back.', ok: 'Replace' }))) return; app.placeBasketLayout(app.basketLayout); app.frameAll(); }, n ? '' : 'primary', { disabled: seq || null }),
       btn('Remove all', () => app.removeAll(), 'danger', { disabled: seq || !app.W.model.rods.size || null })));
-    // cladding
-    const nClad = list().filter((q) => q.clad).length; const reclad = (label) => { if (nClad) app.rebuildBaskets(label); };
-    add(b, h('h4', { class: 'sub', text: 'Cladding' }));
-    add(b, select('Direction', B.CLAD_DIRS.map((x) => [x[0], x[1]]), () => o.cladDir, (v) => { setOpt('cladDir', v); if (nClad) app.rebuildBaskets('Cladding runs ' + (B.CLAD_DIRS.find((x) => x[0] === v) || [0, v])[1].toLowerCase() + ' on every clad basket', (bs) => { for (const q of bs) q.cladDir = v; }); else app.renderBasketPanel(); }),
-      hint((B.CLAD_DIRS.find((x) => x[0] === o.cladDir) || B.CLAD_DIRS[4])[2] + '. The sticks follow the basket underneath, so twisted and tipped rings show through.'));
-    add(b, h('div', { class: 'btns' }, btn(nClad === n && n ? 'Take the cladding off' : 'Clad every basket', () => { if (!n) { app.toast('No baskets to clad yet'); return; } const on = !(nClad === n); app.rebuildBaskets(on ? 'Cladding on every basket: thin sticks laid over the outside, lashed where they cross the rings' : 'Cladding taken off', (bs) => { for (const q of bs) q.clad = on; }); }, nClad === n && n ? '' : 'primary', { disabled: seq || !n || null })),
-      slider('Density', { min: 1, max: 24, step: 0.5, get: () => o.cladDensity, set: (v) => { setOpt('cladDensity', v); if (nClad) app.rebuildBaskets('Cladding rebuilt: ' + v + ' tries per m²', (bs) => { for (const q of bs) q.cladDensity = v; }); }, change: true, fmt: (v) => v + ' per m²' }),
-      slider('Angle', { min: 5, max: 85, step: 1, get: () => o.cladAngle, set: (v) => { setOpt('cladAngle', v); reclad('Cladding rebuilt at up to ' + v + '° from upright'); }, change: true, fmt: (v) => 'up to ' + v + '°' }),
-      slider('Stick length', { min: 1, max: 5, step: 0.1, get: () => o.cladLen, set: (v) => { setOpt('cladLen', v); reclad('Cladding rebuilt'); }, change: true, fmt: (v) => 'about ' + v.toFixed(1) + ' m' }),
-      slider('Runs past', { min: 0, max: 1.5, step: 0.05, get: () => o.cladReach, set: (v) => { setOpt('cladReach', v); reclad('Cladding rebuilt'); }, change: true, fmt: (v) => (v ? 'up to ' + v.toFixed(2) + ' m' : 'none') }),
-      hint('The thin 10 × 20 mm sticks, bent onto the outside of each basket at all angles and lashed wherever they cross a ring or each other; their ends run on past the basket. A stick that crosses fewer than two rings is left off. It goes on last, once the baskets stand.' + (nClad ? ' ' + nClad + ' of ' + n + ' baskets clad.' : '')));
+    // the skin: one layer of cladding over the whole structure
+    const sk = skinNow(); const re = (patch, label) => setSkin(patch, label);
+    add(b, h('h4', { class: 'sub', text: 'Cladding over the whole structure' }));
+    add(b, h('div', { class: 'btns' }, btn(sk.on ? 'Take the cladding off' : 'Clad the whole structure', () => { if (!n) { app.toast('No baskets to clad yet'); return; } re({ on: !sk.on }, sk.on ? 'Cladding taken off' : 'Cladding laid over the whole structure: thin sticks running on from basket to basket, lashed where they cross'); }, sk.on ? '' : 'primary', { disabled: seq || !n || null })),
+      select('Direction', B.CLAD_DIRS.map((x) => [x[0], x[1]]), () => sk.dir, (v) => re({ dir: v }, 'Cladding runs ' + (B.CLAD_DIRS.find((x) => x[0] === v) || [0, v])[1].toLowerCase())),
+      hint((B.CLAD_DIRS.find((x) => x[0] === sk.dir) || B.CLAD_DIRS[3])[2] + '. One field runs over every basket, so the sticks carry on across where baskets meet.'),
+      slider('Density', { min: 2, max: 30, step: 1, change: true, get: () => sk.density, set: (v) => re({ density: v }, 'Cladding rebuilt: ' + v + ' tries per m²'), fmt: (v) => v + ' per m²' }),
+      slider('Angle', { min: 5, max: 85, step: 1, change: true, get: () => sk.angle, set: (v) => re({ angle: v }, 'Cladding rebuilt'), fmt: (v) => 'up to ' + v + '°' }),
+      slider('Stick length', { min: 1, max: 5, step: 0.1, change: true, get: () => sk.len, set: (v) => re({ len: v }, 'Cladding rebuilt'), fmt: (v) => 'about ' + v.toFixed(1) + ' m' }),
+      slider('Where baskets meet', { min: 0.05, max: 0.6, step: 0.05, change: true, get: () => sk.blend, set: (v) => re({ blend: v }, 'Cladding rebuilt'), fmt: (v) => 'rounded over ' + v.toFixed(2) + ' m' }),
+      slider('Runs past', { min: 0, max: 1.5, step: 0.05, change: true, get: () => sk.reach, set: (v) => re({ reach: v }, 'Cladding rebuilt'), fmt: (v) => (v ? 'up to ' + v.toFixed(2) + ' m' : 'none') }),
+      h('div', { class: 'btns' }, btn('Another pattern', () => re({ seed: 1 + Math.floor(Math.random() * 9999) }, 'Cladding laid in a new pattern'), '', { disabled: seq || !sk.on || null })),
+      hint('Thin 10 × 20 mm sticks laid over the outside of the whole structure as one skin: where baskets meet it runs across the join instead of into the space between them. Each stick is lashed where it crosses a ring or stick (three lashings, four if it has to be soaked); sticks that would crack, bend tighter than a soaked stick goes, or overload the baskets are left off. It goes on last, once the baskets stand.'));
     add(b, hint('Each ring is one 18-20 mm pole, soaked, bent round its formwork, lapped and bolted. Rings go up one at a time, held on formwork, and the sticks are bolted in; then the formwork comes out. Scrub the build order below to watch each step settle.'));
     // material
     const mat = B.materials(app.W.model, app.design); const st = Object.assign(B.stock(), app.design.stock || {});
@@ -168,11 +187,11 @@
     const keys = ['poles', 'sticks', 'thin', 'bolts', 'clamps'];
     mat.rows.forEach((r, i) => { const k = keys[i]; const inp = h('input', { type: 'number', min: 0, step: 1, value: st[k], 'aria-label': r.what + ' in stock', style: { width: '64px' }, onchange: () => { app.design.stock = Object.assign({}, st, { [k]: Math.max(0, +inp.value || 0) }); app.autosave(); app.renderBasketPanel(); } });
       const u = r.have ? r.need / r.have : 9; tb.append(h('tr', { class: r.need > r.have ? 'over' : '', title: r.note }, h('td', { class: 't', text: r.what }), h('td', {}, app.ui.statusEl(u, String(r.need))), h('td', {}, inp))); });
-    add(b, tb, hint(mat.rings + ' rings, ' + fmt.n(mat.stickLen, 0) + ' m of sticks in ' + mat.sticks + ' pieces packed into 5 m lengths, ' + mat.bolts + ' bolts. Also in the yard: ' + st.uncut + ' uncut poles and the offcuts.' + (mat.splices ? ' ' + mat.splices + ' rings over 4.75 m need a splice piece to lap.' : '')));
+    add(b, tb, hint(mat.rings + ' rings, ' + fmt.n(mat.stickLen, 0) + ' m of sticks in ' + mat.sticks + ' pieces packed into 5 m lengths, ' + mat.bolts + ' bolts. Also in the yard: ' + st.uncut + ' uncut poles and the offcuts.' + (mat.splices ? ' Rings over 4.75 m round are spliced from several poles: ' + mat.splices + ' poles in spliced rings.' : '')));
     // limits
     const iss = B.issues(app.W.model);
     if (iss.length) { const crit = iss.filter((x) => x.level === 'crit').length; add(b, note('<b>' + (crit ? crit + ' beyond what the material does' : iss.length + ' to test first') + '.</b> ' + app.esc(iss[0].text) + (iss.length > 1 ? ' (and ' + (iss.length - 1) + ' more)' : ''), crit ? 'crit' : 'warn'), h('div', { class: 'btns' }, btn('Select them', () => app.setSel(iss.map((x) => x.id), [])))); }
-    else if (n) add(b, note('Every ring is 3.7-4.5 m round and no stick bends tighter than a soaked one can.', 'ok'));
+    else if (n) add(b, note('Every ring is at least 1.2 m across and inside what has been bent, and no stick bends tighter than a soaked one can.', 'ok'));
   };
 
   // ---------------------------------------------------------------- the basket editor (selection)
@@ -192,28 +211,29 @@
         slider('Shift across', { min: -1, max: 1, step: 0.05, change: true, get: () => ed.dx || 0, set: editRing('dx'), fmt: (v) => v.toFixed(2) + ' m' }),
         slider('Shift back', { min: -1, max: 1, step: 0.05, change: true, get: () => ed.dz || 0, set: editRing('dz'), fmt: (v) => v.toFixed(2) + ' m' }),
         slider('Raise', { min: -0.4, max: 0.8, step: 0.05, change: true, get: () => ed.dy || 0, set: editRing('dy'), fmt: (v) => v.toFixed(2) + ' m' }),
+        h('div', { class: 'btns' }, btn('Add a ring above', () => shiftRings(bk.id, k, +1)), bk.rings > 1 ? btn('Take this ring out', () => shiftRings(bk.id, k, -1)) : null),
         (bk.ringEdits && bk.ringEdits[k]) ? h('div', { class: 'btns' }, btn('Put this ring back', () => app.rebuildBaskets(null, (bs) => { const q = bs.find((x) => x.id === bk.id); if (q.ringEdits) delete q.ringEdits[k]; return { select: bk.id, rk: k }; }, { toast: false }))) : null,
         app.ui.hint('Changes here move only this ring; the sticks through it and the bolts where it crosses other rings are worked out again.'),
         h('h4', { class: 'sub', text: 'The whole basket' }));
     }
     add(box, h('div', { class: 'row two' }, h('span', { class: 'lab', html: '<b style="color:var(--ink)">Basket ' + bk.id + '</b>' }), h('span', { class: 'hint', text: bk.rings + ' rings · ' + (rod.kind === 'ring' ? 'ring ' + ((rod.rk || 0) + 1) + ' of ' + bk.rings + ', ' + ringLabel(rod.L) : rod.kind) })));
     if (!seq) {
-      add(box, slider('Base ring', { min: L.cMin, max: L.cMax, step: 0.05, change: true, get: () => bk.C, set: change('C'), fmt: (v) => v.toFixed(2) + ' m round' + (v > L.cTested ? ' · untested' : '') }),
-        slider('Rings', { min: 1, max: 9, step: 1, change: true, get: () => bk.rings, set: change('rings') }),
+      add(box, slider('Base ring', { min: L.cMin, max: L.cMax, step: 0.05, change: true, get: () => bk.C, set: change('C'), fmt: (v) => v.toFixed(2) + ' m round' + (B.ringPoles(v) > 1 ? ' · ' + B.ringPoles(v) + ' poles' : '') + (v > L.cTested ? ' · untested' : '') }),
+        slider('Rings', { min: 1, max: L.maxRings, step: 1, change: true, get: () => bk.rings, set: change('rings') }),
         slider('Ring spacing', { min: 0.3, max: 1, step: 0.05, change: true, get: () => bk.gap, set: change('gap'), fmt: (v) => v.toFixed(2) + ' m' }),
         segRow('Profile', B.SHAPES, () => bk.shape, change('shape')),
         slider('Lean', { min: 0, max: 25, step: 1, change: true, get: () => bk.lean || 0, set: change('lean'), fmt: (v) => v + '°' }),
         slider('Leaning to', { min: 0, max: 359, step: 1, change: true, get: () => bk.az || 0, set: change('az'), fmt: (v) => v + '°' }),
         select('Bracing', B.BRACES.map((x) => [x[0], x[1]]), () => bk.brace, change('brace')),
         slider('Stick spacing', { min: 0.25, max: 0.9, step: 0.05, change: true, get: () => bk.spacing, set: change('spacing'), fmt: (v) => v.toFixed(2) + ' m' }),
-        slider('Tops', { min: 0, max: 1.5, step: 0.05, change: true, get: () => bk.tops || 0, set: change('tops'), fmt: (v) => (v ? v.toFixed(2) + ' m' : 'none') }),
+        segRow('Top', TOPS, () => bk.top || 'open', change('top')),
+        bk.top === 'point' ? slider('Point', { min: 0.4, max: 3, step: 0.05, change: true, get: () => (bk.apex != null ? bk.apex : 0.6 + 0.9 * (B.rings(bk).slice(-1)[0] || { C: bk.C }).C / TAU), set: change('apex'), fmt: (v) => v.toFixed(2) + ' m above the top ring' })
+          : slider('Tops', { min: 0, max: 1.5, step: 0.05, change: true, get: () => bk.tops || 0, set: change('tops'), fmt: (v) => (v ? v.toFixed(2) + ' m' : 'none') }),
         segRow('Base', [['pegged', 'Pegged'], ['staked', 'Staked']], () => bk.ground || 'pegged', change('ground')),
         slider('Twist', { min: -60, max: 60, step: 1, change: true, get: () => bk.twist || 0, set: change('twist'), fmt: (v) => v + '° a ring' }),
         slider('Ring tip', { min: 0, max: 40, step: 1, change: true, get: () => bk.tilt || 0, set: change('tilt'), fmt: (v) => (v ? v + '°' : 'level') }),
         segRow('Tipping', B.TILTS, () => bk.tiltMode || 'same', change('tiltMode')),
         slider('Drift', { min: 0, max: 1, step: 0.05, change: true, get: () => bk.drift || 0, set: change('drift'), fmt: (v) => (v ? v.toFixed(2) + ' m' : 'none') }),
-        check('Cladding', () => bk.clad, change('clad')),
-        bk.clad ? select('Cladding runs', B.CLAD_DIRS.map((x) => [x[0], x[1]]), () => bk.cladDir || 'random', change('cladDir')) : null,
         check('Doorway', () => bk.door, change('door')),
         bk.door ? slider('Doorway faces', { min: 0, max: 359, step: 1, change: true, get: () => bk.doorAz || 0, set: change('doorAz'), fmt: (v) => v + '°' }) : null,
         slider('Move across', { min: -12, max: 12, step: 0.05, change: true, get: () => bk.x, set: change('x'), fmt: (v) => v.toFixed(2) + ' m' }),
