@@ -73,7 +73,7 @@
   app.rampCSS = () => 'linear-gradient(90deg,' + SEQ.slice(1).map((n, i) => app.colors[n] + ' ' + (i / 5 * 100).toFixed(0) + '%').join(',') + ')';
   // colour modes
   const CLASSES = [['cold', 'Bent cold', 'c1'], ['soak', 'Soaked and pre-bent', 'c2'], ['straight', 'Straight offcut', 'c3'], ['steam', 'Steam-bent member', 'frame']];
-  const PROFILE_COL = { frame: 'frame', stick: 'stick', weave: 'rattan', pole: 'pole', ring: 'frame' };
+  const PROFILE_COL = { frame: 'frame', stick: 'stick', weave: 'rattan', pole: 'pole', ring: 'frame', clad: 'rattan' };
   app.MODES = [['stress', 'Stress'], ['load', 'From loads'], ['order', 'Build order'], ['bending', 'Bending'], ['family', 'Family'], ['timber', 'Timber']];
   app.CLASSES = CLASSES;
   const famIdx = (id) => Math.max(0, app.design.families.findIndex((f) => f.id === id));
@@ -246,7 +246,7 @@
       h('h2', { text: 'Start with rings' }),
       h('p', { text: 'Set out baskets of stacked rings with the Basket tool, lay a sketch under the design and trace it, or start from a pile of baskets.' }),
       h('div', { class: 'btns' },
-        h('button', { class: 'ib primary', onclick: () => { app.placePile(); app.frameAll(); } }, 'Pile of baskets'),
+        h('button', { class: 'ib primary', onclick: () => { app.placeBasketLayout('notebook'); app.frameAll(); } }, 'Clad baskets'),
         h('button', { class: 'ib', onclick: () => app.setTool && app.setTool('ring') }, 'Basket tool'),
         h('button', { class: 'ib', onclick: () => app.placeFrame && app.placeFrame({ type: 'dome' }) }, 'Dome frame'),
         h('button', { class: 'ib', onclick: () => app.placeLayout && app.placeLayout('grotto') }, 'Grotto formwork'),
@@ -346,13 +346,13 @@
     V.setOrtho(app.view.ortho); document.querySelector('[data-view="ortho"]').setAttribute('aria-pressed', app.view.ortho ? 'true' : 'false');
     if (app.view.flow && app.updateFlow) app.updateFlow();
     if (app.showSketch) app.showSketch();
-    if (!loaded && app.placePile) { // first visit: a pile of baskets from the plan sketch, built ring by ring
-      app.placePile(true); app.frameAll();
-      setTimeout(() => app.toast('Seven baskets of soaked rings and bolted sticks, settling under their own weight. Scrub the build order to watch them go up ring by ring, or add your own sketch in Baskets.', 7000), 600);
+    if (!loaded && app.placeBasketLayout) { // first visit: the notebook plan, baskets built ring by ring and clad
+      app.placeBasketLayout('notebook', true); app.frameAll();
+      setTimeout(() => app.toast('Six baskets of soaked rings and bolted sticks, clad in thin sticks, settling under their own weight. Scrub the build order to watch them go up ring by ring, or add your own sketch in Baskets.', 7000), 600);
     }
     // wiring
     document.addEventListener('keydown', onKey);
-    $('#undoBtn').addEventListener('click', app.undo); $('#redoBtn').addEventListener('click', app.redo);
+    $('#undoBtn').addEventListener('click', app.undo); $('#clearBtn').addEventListener('click', () => app.removeAll && app.removeAll()); $('#redoBtn').addEventListener('click', app.redo);
     $('#pauseBtn').addEventListener('click', () => app.setPaused(!app.paused));
     $('#designName').addEventListener('change', (e) => { app.design.name = e.target.value.trim().slice(0, 80) || 'Untitled'; e.target.value = app.design.name; app.autosave(); });
     for (const b of document.querySelectorAll('#viewbtns [data-view]')) b.addEventListener('click', () => {

@@ -7,14 +7,18 @@ const { setup, SHOTS, tally } = require('./pw');
   const mock = `window.claude = { use: async (n) => n === 'downloads' ? { save: async (o) => { (window.__saved = window.__saved || []).push({ filename: o.filename, size: o.data && (o.data.size || o.data.length) }); } } : null };`;
   const { browser, page, logs } = await setup({ wait: 300, init: `try { localStorage.clear(); } catch (e) {}` + mock });
   await page.waitForFunction(() => WF.W.settled, null, { timeout: 120000 }).catch(() => {});
-  let r = await page.evaluate(() => ({ baskets: (WF.W.model.meta.baskets || []).length, rings: Array.from(WF.W.model.rods.values()).filter((q) => q.kind === 'ring').length, settled: WF.W.settled }));
-  t.ok(r.baskets === 7 && r.rings >= 20 && r.settled, 'first visit: the basket pile is built and settles ' + JSON.stringify(r));
+  let r = await page.evaluate(() => ({ baskets: (WF.W.model.meta.baskets || []).length, rings: Array.from(WF.W.model.rods.values()).filter((q) => q.kind === 'ring').length, clad: Array.from(WF.W.model.rods.values()).filter((q) => q.kind === 'clad').length, settled: WF.W.settled }));
+  t.ok(r.baskets === 6 && r.rings >= 20 && r.clad > 50 && r.settled, 'first visit: the clad baskets are built and settle ' + JSON.stringify(r));
   // the Basket tool: click the ground, click again to size the base ring
-  const nb = await page.evaluate(() => { WF.setTool('ring'); const n0 = WF.W.model.meta.baskets.length; WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); WF.ringClick({ kind: 'ground', p: [6.7, 0, 0] }); return [n0, WF.W.model.meta.baskets.length, Array.from(WF.W.model.rods.values()).filter((q) => q.bk === 'B8' && q.kind === 'ring').map((q) => q.L)]; });
+  const nb = await page.evaluate(() => { WF.setTool('ring'); const n0 = WF.W.model.meta.baskets.length; WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); WF.ringClick({ kind: 'ground', p: [6.7, 0, 0] }); return [n0, WF.W.model.meta.baskets.length, Array.from(WF.W.model.rods.values()).filter((q) => q.bk === 'B7' && q.kind === 'ring').map((q) => q.L)]; });
   t.ok(nb[1] === nb[0] + 1 && nb[2].length >= 1 && nb[2][0] >= 3.7 && nb[2][0] <= 5.0, 'Basket tool set out a basket: rings ' + JSON.stringify(nb[2]));
-  const st = await page.evaluate(() => { WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); return WF.W.model.meta.baskets.find((b) => b.id === 'B8').rings; });
+  const st = await page.evaluate(() => { WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); return WF.W.model.meta.baskets.find((b) => b.id === 'B7').rings; });
   t.ok(st === nb[2].length + 1, 'clicking a basket stacks another ring on it (' + st + ' rings)');
   await page.evaluate(() => { WF.undo(); WF.undo(); WF.setTool('select'); });
+  // Remove all, then undo
+  await page.click('#clearBtn'); await page.click('#dialog .primary, #dialog button.danger'); await page.waitForTimeout(300);
+  const ra = await page.evaluate(() => WF.W.model.rods.size); t.ok(ra === 0, 'Remove all empties the design');
+  await page.evaluate(() => WF.undo()); const rb = await page.evaluate(() => WF.W.model.rods.size); t.ok(rb > 100, 'undo brings it all back (' + rb + ' rods)');
   await page.waitForFunction(() => WF.W.settled, null, { timeout: 60000 }).catch(() => {});
   await page.screenshot({ path: SHOTS + '/smoke_baskets.png' });
   // the arch tool, through real pointer events

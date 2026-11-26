@@ -104,7 +104,7 @@
   }
 
   // ---------------------------------------------------------------- selection
-  const KIND = { ring: 'Ring', stake: 'Stake', brace: 'Brace', stick: 'Stick', frame: 'Frame member', arch: 'Arch', loop: 'Loop', hoop: 'Hoop', rod: 'Rod', weave: 'Weaver', pole: 'Ground pole', post: 'Temporary post', ridge: 'Ridge' };
+  const KIND = { clad: 'Cladding stick', ring: 'Ring', stake: 'Stake', brace: 'Brace', stick: 'Stick', frame: 'Frame member', arch: 'Arch', loop: 'Loop', hoop: 'Hoop', rod: 'Rod', weave: 'Weaver', pole: 'Ground pole', post: 'Temporary post', ridge: 'Ridge' };
   const CLASS_LABEL = { cold: 'Bent cold (springs back)', soak: 'Soaked and pre-bent', steam: 'Steam-bent to shape', straight: 'Straight', pole: 'Staked on the ground' };
   function renderSel(b) {
     const w = app.W; const sim = app.activeSim(); const rods = Array.from(app.sel.rods).filter((id) => w.model.rods.has(id)); const joints = Array.from(app.sel.joints);

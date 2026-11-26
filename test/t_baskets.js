@@ -25,6 +25,16 @@ for (const k of stages.filter((_, i) => i % 3 === 0 || i === stages.length - 1))
 ok(worst < 1 && sunk === 0, stages.length + ' stages: worst stress while building ' + (worst * 100).toFixed(0) + '% (stage ' + worstK + ')');
 // undo brings the basket definitions back with the rods
 W.edit((m, s) => B.buildAll(m, [], null, s)); ok(W.model.rods.size === 0, 'baskets removed'); W.undoLast(); ok(W.model.meta.baskets.length === 7 && W.model.rods.size > 50, 'undo brings them back');
+// the notebook plan: six baskets clad in thin sticks stand, and the cladding is counted against the thin sticks
+{
+  const W2 = SF.World.create(SF.Defaults.design(), SF.Defaults.params()); W2.edit((m, s) => B.buildAll(m, B.notebook({}), null, s));
+  const clad = Array.from(W2.model.rods.values()).filter((r) => r.kind === 'clad'); ok(W2.model.meta.baskets.length === 6 && clad.length > 80, '6 baskets with ' + clad.length + ' cladding sticks');
+  ok(clad.every((r) => W2.model.joints.filter((j) => j.a === r.id || j.b === r.id).length >= 2), 'every cladding stick is lashed in two places or more');
+  const r2 = PH.relax(W2.sim, { budgetMs: 20000 }); W2.settled = r2.settled; W2.sync(); const S2 = SF.Checks.summary(W2);
+  ok(r2.settled && S2.peak < 1 && S2.maxTieU < 1, 'clad baskets settle: peak ' + (S2.peak * 100).toFixed(0) + '%, busiest lashing ' + (S2.maxTieU * 100).toFixed(0) + '%');
+  const m2 = B.materials(W2.model, {}); const thin = m2.rows.find((x) => /Thin/.test(x.what)); ok(thin.need > 10 && thin.need <= thin.have, 'cladding uses ' + thin.need + ' of ' + thin.have + ' thin sticks');
+  ok(B.issues(W2.model).every((x) => x.level !== 'crit'), 'nothing bent beyond what the material does');
+}
 // rings drawn in a plan are found
 {
   const w = 200, h = 160; const g = new Float32Array(w * h).fill(1); const circ = [[60, 70, 30], [130, 60, 22], [120, 120, 16]];

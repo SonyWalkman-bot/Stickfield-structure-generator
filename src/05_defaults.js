@@ -17,7 +17,9 @@ SF.Defaults = (function () {
     weave: { label: 'Weave · rattan', section_mm: 10, E_gpa: 6, strength_mpa: 55, density: 550 },
     pole: { label: 'Ground pole · staked', section_mm: 70, timber: true, staked: true },
     // a ring: one 18-20 mm pole soaked and bent round a formwork; it keeps the shape it was bent to
-    ring: { label: 'Ring · soaked pole', section_mm: 20, steam: true, timber: true }
+    ring: { label: 'Ring · soaked pole', section_mm: 20, steam: true, timber: true },
+    // cladding: the thin 10 × 20 mm sticks, as a square of the same area (14 mm)
+    clad: { label: 'Cladding · thin stick', section_mm: 14, timber: true }
   };
   // allowable bearing (kPa), friction, peg pull-out and sideways capacity (N)
   const SOILS = [

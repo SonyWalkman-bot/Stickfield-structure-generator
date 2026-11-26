@@ -26,6 +26,8 @@ Everything is in that one file, so you can share it by email, a shared drive or 
   5.0 m round, one 18-20 mm pole each, soaked and bent.
 - **Brace the rings.** Lattice, diagonal, stake or spiral bracing, with tops that run up past the last ring and
   doorways left open. Every basket can lean, taper, flare or bulge; pick a ring to change its basket.
+- **Clad it.** Cover the baskets in thin sticks laid at all angles, lashed where they cross the rings, their ends
+  running on past the baskets.
 - **Build it step by step.** Each ring goes up on its formwork and is braced before the next; then the formwork comes
   out and the basket has to stand. Baskets are bolted together where their rings cross. Scrub the build order to see
   every step settle under its own weight.

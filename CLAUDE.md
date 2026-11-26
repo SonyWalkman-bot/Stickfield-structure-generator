@@ -66,7 +66,7 @@ baskets), `stock` (what is in the yard) and `sketch` (the underlay image as a da
 
 A **rod** has:
 
-- `id` like `r12`, and `kind`: ring, stake, brace, stick, frame, arch, loop, hoop, rod, weave, pole, post or ridge
+- `id` like `r12`, and `kind`: ring, stake, brace, clad, stick, frame, arch, loop, hoop, rod, weave, pole, post or ridge
 - `pts`, the relaxed node positions (metres, Y up), written back by `World.sync()` once it settles
 - `L`, the rest length; `stage`; `closed`
 - `fix`, its ground sockets: `{ i, p, d? }`, where `d` is the clamp direction and no `d` means pinned
@@ -153,6 +153,10 @@ The material limits come from the bending tests and are in `SF.Basket.LIMITS`; k
   basket from the definitions, so any edit to a basket rebuilds them all.
 - The build: the base ring on the ground (pegged), each ring above held on formwork, the sticks bolted in, then the
   formwork struck (after each basket, or at the end), then baskets bolted where their rings cross.
+- Cladding (`clad`, per basket `b.clad`) goes on last: thin 10 × 20 mm sticks (profile `clad`, a 14 mm square of the
+  same area) marched over the basket's surface at random angles, lashed where they cross rings, kept only if lashed
+  twice. They are counted against the thin sticks in stock.
+- Layouts live in `SF.Basket.LAYOUTS`; `notebook` (six clad baskets) is the first visit.
 - `findCircles` is a plain Hough transform on a greyscale array; it runs in Node, so test it there.
 
 ## Growth (`40_grow.js`, from Stickfield)

@@ -11,7 +11,8 @@ SF.Basket = (function () {
   // what is in the yard; editable in the Baskets panel and saved with the design
   function stock() { return { poles: 140, uncut: 15, sticks: 900, thin: 1500, bolts: 400, clamps: 20 }; }
   function opts() {
-    return { rings: 4, gap: 0.55, shape: 'barrel', lean: 0, az: 0, brace: 'lattice', spacing: 0.5, tops: 0.6, door: false, doorAz: 270, ground: 'pegged', strike: 'each', ties: true, seed: 3 };
+    return { rings: 4, gap: 0.55, shape: 'barrel', lean: 0, az: 0, brace: 'lattice', spacing: 0.5, tops: 0.6, door: false, doorAz: 270, ground: 'pegged', strike: 'each', ties: true, seed: 3,
+      clad: false, cladDensity: 5, cladAngle: 55, cladLen: 2.8, cladReach: 0.5 };
   }
   const SHAPES = [['barrel', 'Barrel'], ['taper', 'Taper'], ['flare', 'Flare'], ['straight', 'Straight'], ['wave', 'Wave']];
   const BRACES = [['lattice', 'Lattice', 'Two families of sticks spiralling opposite ways, bolted where they cross the rings: stiff, and the busiest pattern'],
@@ -143,12 +144,49 @@ SF.Basket = (function () {
     }
     return out;
   }
-  // the whole pile: every basket in order, each built and struck, then bolted together
+  // the surface of a basket at height y: centre and radius, between the rings either side (held at the end rings beyond)
+  function surfAt(R, y) {
+    if (y <= R[0].c[1] || R.length === 1) return { c: [R[0].c[0], y, R[0].c[2]], r: R[0].C / TAU };
+    for (let k = 0; k < R.length - 1; k++) { const a = R[k], b = R[k + 1]; if (y <= b.c[1]) { const t = (y - a.c[1]) / Math.max(1e-6, b.c[1] - a.c[1]); return { c: [a.c[0] + (b.c[0] - a.c[0]) * t, y, a.c[2] + (b.c[2] - a.c[2]) * t], r: (a.C + (b.C - a.C) * t) / TAU }; } }
+    const z = R[R.length - 1]; return { c: [z.c[0], y, z.c[2]], r: z.C / TAU };
+  }
+  // cladding: thin sticks laid over the outside of a basket at all angles, bent onto it, lashed where they cross its
+  // rings, their ends running on past it. Only sticks held in two places or more are kept.
+  function clad(m, b, o, stage) {
+    const mat = m.material; const R = rings(b); const rnd = M.rng((b.seed || 3) * 104729 + 17); const out = [];
+    const ringRods = Array.from(m.rods.values()).filter((r) => r.bk === b.id && r.kind === 'ring').sort((p, q) => (p.rk || 0) - (q.rk || 0)); if (ringRods.length < 1) return out;
+    const yLo = 0.05, yTop = R[R.length - 1].c[1]; const area = R.reduce((a, r) => a + r.C, 0) / R.length * Math.max(0.5, yTop - R[0].c[1] + 0.4);
+    const count = Math.max(4, Math.round((o.cladDensity || 3) * area)); const maxA = (o.cladAngle || 55) * Math.PI / 180;
+    for (let q = 0; q < count; q++) {
+      const y0 = R[0].c[1] + (yTop - R[0].c[1] + 0.2) * rnd(), th0 = TAU * rnd(); const a = (rnd() < 0.5 ? -1 : 1) * (0.15 + 0.85 * rnd()) * maxA; const L = (o.cladLen || 2.6) * (0.6 + 0.8 * rnd());
+      // march along the surface both ways from the middle; past the basket the stick runs straight on
+      const half = (dir) => { const P = []; let y = y0, th = th0, s = 0, last = null; const ds = 0.1;
+        while (s < L / 2) { const sf = surfAt(R, y); const p = M.add(sf.c, [sf.r * Math.cos(th), 0, sf.r * Math.sin(th)]);
+          if (y < yLo || y > yTop + 0.05) { if (!last || P.length < 2) break; const d = M.norm(M.sub(P[P.length - 1], P[P.length - 2])); const run = Math.min(L / 2 - s, (o.cladReach == null ? 0.5 : o.cladReach) * (0.4 + 0.6 * rnd())); const e = M.add(P[P.length - 1], M.mul(d, run)); if (e[1] > 0.03) P.push(e); break; }
+          P.push(p); last = p; s += ds; y += dir * ds * Math.cos(a); th += dir * ds * Math.sin(a) / sf.r; }
+        return P; };
+      const up = half(1), dn = half(-1); const P = dn.reverse().concat(up.slice(1)); if (P.length < 4) continue;
+      const Lp = Mo.polyLen(P, false); const n = Mo.segCount(Lp, mat) + 1; const pts = Mo.resample(P, n, false);
+      // where it crosses each ring: lashed there
+      const ties = [];
+      ringRods.forEach((rr, k) => { const r = R[k]; if (!r) return; let best = null; for (let i = 0; i < pts.length - 1; i++) { const y1 = pts[i][1], y2 = pts[i + 1][1]; if ((y1 - r.c[1]) * (y2 - r.c[1]) > 0) continue; const t = Math.abs(y2 - y1) < 1e-9 ? 0 : (r.c[1] - y1) / (y2 - y1); const p = M.lerp3(pts[i], pts[i + 1], t); const nr = rr.pts.length; let bj = 0, bd = Infinity; for (let j = 0; j < nr; j++) { const g = segSeg(p, p, rr.pts[j], rr.pts[(j + 1) % nr]); if (g.d < bd) { bd = g.d; bj = j; best = { i, t, j, tb: g.t, d: g.d }; } } }
+        if (best && best.d < 0.1) ties.push(Object.assign({ rod: rr.id }, best)); });
+      if (ties.length < 2) continue;
+      const strain = maxCurv(pts) * SF.Phys.sectionOf(mat, { profile: 'clad' }).c1 * 1.15; const soak = strain > (mat.elastic_strain || 0.004);
+      const rod = Mo.makeRod(m, 'clad', pts, Lp, stage, false, Object.assign({ profile: 'clad', cls: soak ? 'soak' : 'cold' }, soak ? { rest: pts } : {})); rod.bk = b.id; rod.part = 'clad'; out.push(rod);
+      for (const t of ties) Mo.addJoint(m, rod.id, t.i, t.rod, t.j, stage, Object.assign({}, t.t > 0.001 ? { ta: Math.round(t.t * 1000) / 1000 } : {}, t.tb > 0.001 ? { tb: Math.round(t.tb * 1000) / 1000 } : {}));
+    }
+    return out;
+  }
+  // the whole pile: every basket in order, each built and struck, then bolted together; then the cladding goes on
   function buildAll(m, baskets, o, s) {
     clear(m); const bs = (baskets || []).map((b) => Object.assign({}, b)); m.meta.baskets = JSON.parse(JSON.stringify(bs)); o = Object.assign(opts(), o || {}); let stage = s; const out = [];
     bs.forEach((b, i) => { if (i > 0) stage = Mo.nextStage(m); out.push(...build(m, Object.assign(b, { strike: o.strike }), stage)); stage = m.meta.stage; });
     if (o.ties !== false && bs.length > 1) { stage = Mo.nextStage(m); tie(m, stage); }
     if (o.strike === 'end') { stage = Mo.nextStage(m); Mo.release(m, stage, new Set(out.map((r) => r.id))); }
+    // cladding, basket by basket, on the standing pile; where cladding sticks cross each other or a neighbour, lashed
+    const cl = []; for (const b of bs) if (b.clad) { stage = Mo.nextStage(m); const r = clad(m, b, o, stage); cl.push(...r); out.push(...r); }
+    if (cl.length) Mo.autoJoin(m, cl.map((r) => r.id), { radius: 0.06, perRod: 3, spacing: 0.6, perPair: 1 }, stage);
     return out;
   }
   // take the baskets out of the model (other rods stay)
@@ -160,8 +198,16 @@ SF.Basket = (function () {
   function make(design, x, z, C) {
     const o = Object.assign(opts(), design.basketOpts || {}); const ids = (design.baskets || []).map((b) => parseInt(String(b.id).slice(1), 10) || 0);
     return { id: 'B' + (Math.max(0, ...ids) + 1), x: Math.round(x * 1000) / 1000, z: Math.round(z * 1000) / 1000, C: clampC(C || 4.4), rings: o.rings, gap: o.gap, shape: o.shape, lean: o.lean, az: o.az,
-      brace: o.brace, spacing: o.spacing, tops: o.tops, door: o.door, doorAz: o.doorAz, ground: o.ground, strike: o.strike, seed: o.seed };
+      brace: o.brace, spacing: o.spacing, tops: o.tops, door: o.door, doorAz: o.doorAz, ground: o.ground, strike: o.strike, seed: o.seed, clad: !!o.clad };
   }
+  // the notebook plan (Nov 2026): six baskets round a big one, stacked to different heights, clad all over
+  function notebook(design) {
+    design = design || {};
+    const spots = [[0.55, -0.55, 5.0, 4, 'barrel', 0, 0, 'lattice'], [1.11, -1.65, 3.7, 6, 'straight', 8, 300, 'stakes'], [-0.79, -0.32, 4.15, 5, 'taper', 0, 0, 'lattice'],
+      [-0.18, 0.56, 3.9, 3, 'flare', 0, 0, 'diagonal'], [-1.29, 0.72, 3.77, 2, 'straight', 0, 0, 'diagonal'], [0.52, 1.43, 3.7, 3, 'straight', 10, 70, 'lattice']];
+    return spots.map(([x, z, C, n, shape, lean, az, brace], i) => Object.assign(make({ baskets: [], basketOpts: design.basketOpts }, x, z, C), { id: 'B' + (i + 1), rings: n, gap: 0.5, shape, lean, az, brace, tops: 0.4, door: false, seed: 5 + i, clad: true }));
+  }
+  const LAYOUTS = [['notebook', 'Notebook plan: six baskets, clad', notebook], ['pile', 'Pile of seven baskets', pile]];
   // the pile from the plan sketch: rings of different sizes scattered and touching, some leaning
   function pile(design) {
     design = design || {};
@@ -173,22 +219,24 @@ SF.Basket = (function () {
   // ---------------------------------------------------------------- stock and checks
   // what the design uses against what is in the yard: rings take a pole each, sticks are packed into 5 m lengths
   function materials(model, design) {
-    const st = Object.assign(stock(), design && design.stock); const rings = [], sticks = []; let bolts = 0, splices = 0;
-    for (const r of model.rods.values()) { if (r.kind === 'ring') rings.push(r.L); else if (r.kind === 'stake' || r.kind === 'brace' || r.kind === 'stick') sticks.push(r.L); }
+    const st = Object.assign(stock(), design && design.stock); const rings = [], sticks = [], thin = []; let bolts = 0, splices = 0, lashes = 0;
+    for (const r of model.rods.values()) { if (r.kind === 'ring') rings.push(r.L); else if (r.kind === 'stake' || r.kind === 'brace' || r.kind === 'stick') sticks.push(r.L); else if (r.kind === 'clad') thin.push(r.L); }
     for (const e of model.meta.events || []) for (const r of e.struck) if (r.kind === 'ring') rings.push(r.L);
     for (const L of rings) { if (LIMITS.pole - L < LIMITS.minLap) splices++; bolts += 2; }
-    for (const j of model.joints) bolts += j.type === 'bolt' ? 1 : 0;
+    for (const j of model.joints) { if (j.type === 'bolt') bolts++; else lashes++; }
     // sticks longer than stock are spliced from two; the rest packed first-fit into 5 m lengths
-    const pieces = []; for (const L of sticks) { let l = L; while (l > LIMITS.stick) { pieces.push(LIMITS.stick); l -= LIMITS.stick - 0.3; } pieces.push(l); }
-    pieces.sort((a, b) => b - a); const bins = []; for (const p of pieces) { const k = bins.findIndex((v) => v + p + 0.01 <= LIMITS.stick); if (k >= 0) bins[k] += p + 0.01; else bins.push(p); }
+    const pack = (list) => { const pieces = []; for (const L of list) { let l = L; while (l > LIMITS.stick) { pieces.push(LIMITS.stick); l -= LIMITS.stick - 0.3; } pieces.push(l); }
+      pieces.sort((a, b) => b - a); const bins = []; for (const p of pieces) { const k = bins.findIndex((v) => v + p + 0.01 <= LIMITS.stick); if (k >= 0) bins[k] += p + 0.01; else bins.push(p); } return { pieces, bins }; };
+    const { pieces, bins } = pack(sticks); const tp = pack(thin); const thinLen = thin.reduce((a, b) => a + b, 0);
     const poles = rings.length; const stickLen = sticks.reduce((a, b) => a + b, 0);
     const rows = [
       { what: 'Rings (5 m poles, 18-20 mm)', need: poles + splices, have: st.poles, unit: 'poles', note: splices ? splices + ' rings need a splice piece: too big to lap a 5 m pole' : 'one pole per ring, lapped and bolted' },
       { what: 'Sticks (20 × 20 mm, 5 m)', need: bins.length, have: st.sticks, unit: 'sticks', note: stickLen.toFixed(0) + ' m of sticks in ' + pieces.length + ' pieces' },
+      { what: 'Thin sticks (10 × 20 mm, 5 m)', need: tp.bins.length, have: st.thin, unit: 'sticks', note: thin.length ? thinLen.toFixed(0) + ' m of cladding in ' + tp.pieces.length + ' pieces, lashed at ' + lashes + ' places' : 'for cladding' },
       { what: 'Bolts (with big washers)', need: bolts, have: st.bolts, unit: 'bolts', note: 'two at each ring lap, one at each crossing' },
       { what: 'Clamps', need: Math.min(rings.length, 8), have: st.clamps, unit: 'clamps', note: 'to hold rings round their formwork while bolting (eight in use at once)' }
     ];
-    return { rows, rings: rings.length, sticks: pieces.length, stickLen, bolts, splices };
+    return { rows, rings: rings.length, sticks: pieces.length, stickLen, thin: tp.pieces.length, thinLen, lashes, bolts, splices };
   }
   // what breaks the tested limits: rings outside the sizes that can be bent, sticks bent tighter than a soaked stick goes
   function issues(model) {
@@ -243,5 +291,5 @@ SF.Basket = (function () {
     circles.forEach((c, i) => { const b = make(temp, (c.x - cx) * mpp, (c.y - cy) * mpp, clampC(TAU * c.r * mpp)); b.id = 'B' + (i + 1); b.seed = 3 + i; temp.baskets.push(b); bs.push(b); });
     return { baskets: bs, mpp, cx, cy };
   }
-  return { LIMITS, SHAPES, BRACES, stock, opts, rings, ringPoint, build, buildAll, tie, clear, make, pile, materials, issues, findCircles, fromCircles, clampC };
+  return { LIMITS, SHAPES, BRACES, LAYOUTS, notebook, clad, stock, opts, rings, ringPoint, build, buildAll, tie, clear, make, pile, materials, issues, findCircles, fromCircles, clampC };
 })();

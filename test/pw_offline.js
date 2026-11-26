@@ -16,7 +16,7 @@ const { ROOT, SHOTS, GL_ARGS, tally } = require('./pw');
   t.ok(f.three === '128' && f.standalone === true, 'three.js is inside the file: ' + JSON.stringify(f));
   t.ok(f.ui && f.mono && f.disp, 'the fonts are inside the file');
   await page.waitForFunction(() => WF.W.settled, null, { timeout: 120000 }).catch(() => {});
-  t.ok(await page.evaluate(() => (WF.W.model.meta.baskets || []).length === 7 && WF.W.settled), 'builds and settles the basket pile with no internet');
+  t.ok(await page.evaluate(() => (WF.W.model.meta.baskets || []).length === 6 && WF.W.settled), 'builds and settles the clad baskets with no internet');
   await page.evaluate(() => WF.stopGrowth()); await page.waitForFunction(() => WF.W.settled, null, { timeout: 60000 }).catch(() => {});
   await page.screenshot({ path: SHOTS + '/offline_grown.png' });
   await page.click('#filesBtn'); await page.waitForTimeout(300);
