@@ -8,11 +8,11 @@ const { setup, SHOTS, tally } = require('./pw');
   const { browser, page, logs } = await setup({ wait: 300, init: `try { localStorage.clear(); } catch (e) {}` + mock });
   await page.waitForFunction(() => WF.W.settled, null, { timeout: 120000 }).catch(() => {});
   let r = await page.evaluate(() => ({ baskets: (WF.W.model.meta.baskets || []).length, rings: Array.from(WF.W.model.rods.values()).filter((q) => q.kind === 'ring').length, clad: Array.from(WF.W.model.rods.values()).filter((q) => q.kind === 'clad').length, settled: WF.W.settled }));
-  t.ok(r.baskets === 6 && r.rings >= 20 && r.clad > 50 && r.settled, 'first visit: the clad baskets are built and settle ' + JSON.stringify(r));
+  t.ok(r.baskets === 3 && r.rings >= 12 && r.clad > 50 && r.settled, 'first visit: the swirling tower is built, clad and settles ' + JSON.stringify(r));
   // the Basket tool: click the ground, click again to size the base ring
-  const nb = await page.evaluate(() => { WF.setTool('ring'); const n0 = WF.W.model.meta.baskets.length; WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); WF.ringClick({ kind: 'ground', p: [6.7, 0, 0] }); return [n0, WF.W.model.meta.baskets.length, Array.from(WF.W.model.rods.values()).filter((q) => q.bk === 'B7' && q.kind === 'ring').map((q) => q.L)]; });
+  const nb = await page.evaluate(() => { WF.setTool('ring'); const n0 = WF.W.model.meta.baskets.length; WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); WF.ringClick({ kind: 'ground', p: [6.7, 0, 0] }); return [n0, WF.W.model.meta.baskets.length, Array.from(WF.W.model.rods.values()).filter((q) => q.bk === 'B4' && q.kind === 'ring').map((q) => q.L)]; });
   t.ok(nb[1] === nb[0] + 1 && nb[2].length >= 1 && nb[2][0] >= 3.7 && nb[2][0] <= 5.0, 'Basket tool set out a basket: rings ' + JSON.stringify(nb[2]));
-  const st = await page.evaluate(() => { WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); return WF.W.model.meta.baskets.find((b) => b.id === 'B7').rings; });
+  const st = await page.evaluate(() => { WF.ringClick({ kind: 'ground', p: [6, 0, 0] }); return WF.W.model.meta.baskets.find((b) => b.id === 'B4').rings; });
   t.ok(st === nb[2].length + 1, 'clicking a basket stacks another ring on it (' + st + ' rings)');
   await page.evaluate(() => { WF.undo(); WF.undo(); WF.setTool('select'); });
   // Remove all, then undo

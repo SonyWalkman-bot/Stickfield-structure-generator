@@ -12,7 +12,8 @@ SF.Basket = (function () {
   function stock() { return { poles: 140, uncut: 15, sticks: 900, thin: 1500, bolts: 400, clamps: 20 }; }
   function opts() {
     return { rings: 4, gap: 0.55, shape: 'barrel', lean: 0, az: 0, brace: 'lattice', spacing: 0.5, tops: 0.6, door: false, doorAz: 270, ground: 'pegged', strike: 'each', ties: true, seed: 3,
-      clad: false, cladDensity: 5, cladAngle: 55, cladLen: 2.8, cladReach: 0.5 };
+      twist: 0, tilt: 0, drift: 0, tiltMode: 'same',
+      clad: false, cladDir: 'random', cladDensity: 5, cladAngle: 55, cladLen: 2.8, cladReach: 0.5 };
   }
   const SHAPES = [['barrel', 'Barrel'], ['taper', 'Taper'], ['flare', 'Flare'], ['straight', 'Straight'], ['wave', 'Wave']];
   const BRACES = [['lattice', 'Lattice', 'Two families of sticks spiralling opposite ways, bolted where they cross the rings: stiff, and the busiest pattern'],
@@ -20,12 +21,20 @@ SF.Basket = (function () {
     ['stakes', 'Stakes', 'Upright sticks through every ring, like the stakes of a woven basket: easiest to build, least stiff'],
     ['spiral', 'Spiral', 'One family of sticks spiralling round: it twists the basket as it loads']];
   const clampC = (c) => M.clamp(c, LIMITS.cMin, LIMITS.cMax);
+  const TILTS = [['same', 'Same way', 'Every ring tips towards the twist: a swirl'], ['alt', 'Alternate', 'Rings tip one way then the other: a zigzag of overlapping rings'], ['open', 'Fan out', 'Each ring tips a little further: the stack opens like a flower']];
+  // which way the cladding runs over a basket's surface
+  const CLAD_DIRS = [['rings', 'Along rings', 'Sticks follow the rings, layered round the basket and tilting with them'], ['twist', 'Twist', 'Sticks spiral the way the rings twist'],
+    ['rise', 'Rise', 'Sticks run up the stack, flaring out past the top like a flame'], ['flow', 'Flow', 'Sticks rise at the bottom and turn to run round the rings higher up'], ['random', 'Any way', 'Sticks at all angles']];
+  const DEG = Math.PI / 180;
 
   // ---------------------------------------------------------------- ring geometry
-  // the rings of a basket, bottom to top: centre, circumference and normal
+  // the rings of a basket, bottom to top: centre, circumference and normal. The stack can lean, each ring can tip
+  // (towards a direction that turns by the twist at every ring) and the centres can drift round a widening helix;
+  // b.ringEdits[k] moves, resizes and tips one ring on its own
   function rings(b) {
     const n = Math.max(1, Math.min(9, Math.round(b.rings || 4))); const C0 = clampC(b.C || 4.4); const out = [];
-    const lean = (b.lean || 0) * Math.PI / 180, az = (b.az || 0) * Math.PI / 180; const dir = [Math.cos(az), 0, Math.sin(az)];
+    const lean = (b.lean || 0) * DEG, az = (b.az || 0) * DEG; const dir = [Math.cos(az), 0, Math.sin(az)];
+    const twist = (b.twist || 0) * DEG, tilt = (b.tilt || 0) * DEG, drift = b.drift || 0; const edits = b.ringEdits || {};
     const y0 = b.y0 != null ? b.y0 : b.ground === 'staked' ? 0.3 : 0.03;
     for (let k = 0; k < n; k++) {
       const u = n > 1 ? k / (n - 1) : 0; let f;
@@ -36,11 +45,20 @@ SF.Basket = (function () {
         case 'wave': f = 0.5 * Math.sin(u * Math.PI * 2); break;
         default: f = 0.8 * Math.sin(u * Math.PI) - 0.2 * u; // barrel
       }
+      const e = edits[k] || {};
       // sizes swing about the base ring, inside what can be bent
-      const C = clampC(C0 + f * 0.9);
-      const y = y0 + k * (b.gap || 0.55); const off = Math.tan(lean) * (y - y0);
-      const tilt = lean * 0.6 * u; const nrm = [Math.sin(tilt) * dir[0], Math.cos(tilt), Math.sin(tilt) * dir[2]];
-      out.push({ k, c: [b.x + off * dir[0], y, b.z + off * dir[2]], C, n: nrm });
+      const C = clampC(C0 + f * 0.9 + (e.dC || 0));
+      const y = y0 + k * (b.gap || 0.55) + (e.dy || 0); const off = Math.tan(lean) * (y - y0);
+      // the ring's own tip: none for the base ring on the ground, then towards a direction that turns with the twist
+      const phi = az + k * twist + (e.az != null ? e.az * DEG : 0); let t = k === 0 ? 0 : tilt;
+      if (b.tiltMode === 'alt') t *= k % 2 ? 1 : -1; else if (b.tiltMode === 'open') t *= u;
+      if (e.tilt != null) t = e.tilt * DEG;
+      const lt = lean * 0.6 * u; const nrm = M.norm([Math.tan(lt) * dir[0] + Math.tan(t) * Math.cos(phi), 1, Math.tan(lt) * dir[2] + Math.tan(t) * Math.sin(phi)]);
+      // centres drift round a helix that widens up the stack
+      const dr = drift * u; const c = [b.x + off * dir[0] + dr * Math.cos(phi + Math.PI / 2) + (e.dx || 0), y, b.z + off * dir[2] + dr * Math.sin(phi + Math.PI / 2) + (e.dz || 0)];
+      // a tipped ring must clear the ground
+      const reach = C / TAU * Math.sqrt(Math.max(0, 1 - nrm[1] * nrm[1])); if (k > 0 && c[1] - reach < 0.06) c[1] = 0.06 + reach;
+      out.push({ k, c, C, n: nrm });
     }
     return out;
   }
@@ -67,7 +85,9 @@ SF.Basket = (function () {
     const D = TAU / N; const off0 = rnd() * D;
     const addRing = (r, held) => {
       const n = Math.max(24, Mo.segCount(r.C, mat)); const pts = Array.from({ length: n }, (_, i) => ringPoint(r, TAU * i / n));
-      const rod = tag(Mo.makeRod(m, 'ring', pts, r.C, stage, true, { profile: 'ring', held, cls: 'soak' }), 'ring'); rod.rk = r.k; ringRods.push({ rod, r, n }); return rod;
+      const rod = tag(Mo.makeRod(m, 'ring', pts, r.C, stage, true, { profile: 'ring', held, cls: 'soak' }), 'ring'); rod.rk = r.k; ringRods.push({ rod, r, n });
+      // bolted where it crosses any ring already up: its own stack's, and (when baskets are tied) its neighbours'
+      connectRing(m, rod, stage, b.ties !== false); return rod;
     };
     const tieToRing = (rod, i, t, k, th) => { const R0 = ringRods[k]; if (!R0) return; const q = ringAt(R0.n, th); Mo.addJoint(m, rod.id, i, R0.rod.id, q.i, stage, Object.assign({}, bolt, t > 0.001 ? { ta: t } : {}, q.t > 0.001 ? { tb: q.t } : {})); };
     // a stick along points: smoothed, cut to its stock, lashed where it passes each ring
@@ -93,7 +113,7 @@ SF.Basket = (function () {
         for (let i = 0; i < N; i++) {
           const a = (q) => off0 + sh + q * D; const thB = i % 2 ? a(i + 1) : a(i), thT = i % 2 ? a(i) : a(i + 1);
           const pB = ringPoint(R[k - 1], thB), pT = ringPoint(R[k], thT);
-          if (inDoor(b, thB, pB[1]) || inDoor(b, thT, pT[1])) continue;
+          if (inDoor(b, thB, pB[1]) || inDoor(b, thT, pT[1]) || M.dist(pB, pT) < 0.25) continue;
           stick([pB, pT], 'brace', [{ p: pB, k: k - 1, th: thB }, { p: pT, k, th: thT }]);
         }
       }
@@ -113,9 +133,20 @@ SF.Basket = (function () {
             while (hits.length && inDoor(b, hits[0].th, hits[0].p[1])) { hits.shift(); P.shift(); }
             if (hits.length < 2) continue;
           }
-          const ground = b.ground === 'staked' && !door; if (ground) P.unshift([P[0][0], 0, P[0][2]]);
-          const last = P[P.length - 1], prev = P[P.length - 2]; const e = ext(i * 2 + (sgn < 0 ? 1 : 0)); if (e > 0.1) P.push(M.add(last, M.mul(M.norm(M.sub(last, prev)), e)));
-          stick(P, 'stake', hits, ground);
+          // where rings tip into each other a stick can't run smoothly through them: it is cut there and carries on as
+          // a new stick from the same ring (the two overlap at that bolt); rings closer than 0.22 m are skipped (they are bolted)
+          const runs = []; let cur = [];
+          for (const hh of hits) {
+            if (cur.length) { const pv = cur[cur.length - 1]; if (M.dist(pv.p, hh.p) < 0.22) continue;
+              if (cur.length >= 2) { const d1 = M.norm(M.sub(pv.p, cur[cur.length - 2].p)), d2 = M.norm(M.sub(hh.p, pv.p)); if (M.dot(d1, d2) < Math.cos(30 * DEG)) { runs.push(cur); cur = [pv]; } } }
+            cur.push(hh);
+          }
+          runs.push(cur);
+          runs.forEach((run, ri) => {
+            if (run.length < 2) return; const Q = run.map((x) => x.p); const ground = ri === 0 && b.ground === 'staked' && !door; if (ground) Q.unshift([Q[0][0], 0, Q[0][2]]);
+            if (ri === runs.length - 1) { const last = Q[Q.length - 1], prev = Q[Q.length - 2]; const e = ext(i * 2 + (sgn < 0 ? 1 : 0)); if (e > 0.1) Q.push(M.add(last, M.mul(M.norm(M.sub(last, prev)), e))); }
+            stick(Q, 'stake', run, ground);
+          });
         }
       }
     }
@@ -130,7 +161,22 @@ SF.Basket = (function () {
     let s = den > 1e-12 ? M.clamp((b * e - c * d) / den, 0, 1) : 0; let t = c > 1e-12 ? M.clamp((b * s + e) / c, 0, 1) : 0; s = a > 1e-12 ? M.clamp((b * t - d) / a, 0, 1) : 0;
     return { s, t, d: M.dist(M.add(p, M.mul(d1, s)), M.add(r, M.mul(d2, t))) };
   }
-  // bolt baskets to each other where their rings meet
+  // bolt a ring, as it goes up, to every ring already standing that it crosses or passes within a bolt's reach of
+  // (two bolts per pair, well apart). Rings that tip into each other are joined this way, as are baskets that overlap.
+  function connectRing(m, rod, stage, others) {
+    const out = []; const na = rod.pts.length; const bb = boxOf(rod.pts, 0.1);
+    for (const B of m.rods.values()) {
+      if (B === rod || B.kind !== 'ring' || !B.bk || (!others && B.bk !== rod.bk)) continue; if (!overlaps(bb, boxOf(B.pts, 0.1))) continue;
+      const nb = B.pts.length; const best = [];
+      for (let i = 0; i < na; i++) for (let j = 0; j < nb; j++) { const q = segSeg(rod.pts[i], rod.pts[(i + 1) % na], B.pts[j], B.pts[(j + 1) % nb]); if (q.d < 0.09) best.push({ i, j, s: q.s, t: q.t, d: q.d }); }
+      best.sort((x, y) => x.d - y.d); const used = [];
+      for (const t of best) { if (used.some((u) => { const di = Math.abs(u.i - t.i); return Math.min(di, na - di) < 3; })) continue; used.push(t); out.push(Mo.addJoint(m, rod.id, t.i, B.id, t.j, stage, Object.assign({ type: 'bolt' }, t.s > 0.001 ? { ta: Math.round(t.s * 1000) / 1000 } : {}, t.t > 0.001 ? { tb: Math.round(t.t * 1000) / 1000 } : {}))); if (used.length >= 2) break; }
+    }
+    return out;
+  }
+  function boxOf(P, pad) { const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (const p of P) for (let c = 0; c < 3; c++) { lo[c] = Math.min(lo[c], p[c] - pad); hi[c] = Math.max(hi[c], p[c] + pad); } return { lo, hi }; }
+  const overlaps = (a, b) => [0, 1, 2].every((c) => a.lo[c] <= b.hi[c] && b.lo[c] <= a.hi[c]);
+  // bolt baskets to each other where their rings meet (designs from before rings were bolted as they went up)
   function tie(m, stage) {
     const rs = Array.from(m.rods.values()).filter((r) => r.bk && r.kind === 'ring'); const out = [];
     for (let a = 0; a < rs.length; a++) for (let c = a + 1; c < rs.length; c++) {
@@ -144,48 +190,82 @@ SF.Basket = (function () {
     }
     return out;
   }
-  // the surface of a basket at height y: centre and radius, between the rings either side (held at the end rings beyond)
-  function surfAt(R, y) {
-    if (y <= R[0].c[1] || R.length === 1) return { c: [R[0].c[0], y, R[0].c[2]], r: R[0].C / TAU };
-    for (let k = 0; k < R.length - 1; k++) { const a = R[k], b = R[k + 1]; if (y <= b.c[1]) { const t = (y - a.c[1]) / Math.max(1e-6, b.c[1] - a.c[1]); return { c: [a.c[0] + (b.c[0] - a.c[0]) * t, y, a.c[2] + (b.c[2] - a.c[2]) * t], r: (a.C + (b.C - a.C) * t) / TAU }; } }
-    const z = R[R.length - 1]; return { c: [z.c[0], y, z.c[2]], r: z.C / TAU };
+  // the basket's surface: point (u, th) on the ruled surface through its rings, u = 0 at the base ring, 1 at the next...
+  function surf(R, u, th) { const K = R.length; if (K === 1) return ringPoint(R[0], th); const k = M.clamp(Math.floor(u), 0, K - 2); const f = u - k; return M.lerp3(ringPoint(R[k], th), ringPoint(R[k + 1], th), f); }
+  // which way a cladding stick runs at (u, th): its angle from straight up the surface
+  function cladAngle(mode, b, o, u, th, K, rnd) {
+    const jit = ((o.cladAngle == null ? 55 : o.cladAngle) / 55) * 14 * DEG * (rnd() - 0.5) * 2; const hand = (b.twist || 0) < 0 ? -1 : 1;
+    switch (mode) {
+      case 'rings': return Math.PI / 2 * (rnd() < 0.5 ? 1 : -1) + jit * 0.6;
+      case 'twist': return hand * (38 * DEG + 0.25 * Math.sin(2 * th + u)) + jit;
+      case 'rise': return jit * 0.8;
+      case 'flow': return hand * (10 * DEG + 75 * DEG * Math.min(1, u / Math.max(1, K - 1)) ** 1.3) + jit * 0.7;
+      default: return (rnd() < 0.5 ? -1 : 1) * (0.15 + 0.85 * rnd()) * (o.cladAngle || 55) * DEG;
+    }
   }
-  // cladding: thin sticks laid over the outside of a basket at all angles, bent onto it, lashed where they cross its
-  // rings, their ends running on past it. Only sticks held in two places or more are kept.
+  // cladding: thin sticks laid over the outside of a basket, following a direction over its surface (along the rings,
+  // with the twist, rising, or flowing from one to the other), lashed wherever they cross the basket's rings and sticks,
+  // their ends running on past it. Only sticks held in three places or more are kept. They go on band by band, bottom up.
   function clad(m, b, o, stage) {
-    const mat = m.material; const R = rings(b); const rnd = M.rng((b.seed || 3) * 104729 + 17); const out = [];
-    const ringRods = Array.from(m.rods.values()).filter((r) => r.bk === b.id && r.kind === 'ring').sort((p, q) => (p.rk || 0) - (q.rk || 0)); if (ringRods.length < 1) return out;
-    const yLo = 0.05, yTop = R[R.length - 1].c[1]; const area = R.reduce((a, r) => a + r.C, 0) / R.length * Math.max(0.5, yTop - R[0].c[1] + 0.4);
-    const count = Math.max(4, Math.round((o.cladDensity || 3) * area)); const maxA = (o.cladAngle || 55) * Math.PI / 180;
+    const mat = m.material; const R = rings(b); const K = R.length; const rnd = M.rng((b.seed || 3) * 104729 + 17); const out = []; if (K < 2) return out;
+    const mode = b.cladDir || o.cladDir || 'random';
+    // what a cladding stick can be lashed to: this basket's rings, stakes and braces (segments in a grid)
+    const cs = 0.35; const grid = new Map(); const key = (x, y, z) => x + ',' + y + ',' + z;
+    for (const r of m.rods.values()) { if (r.bk !== b.id || r.kind === 'clad') continue; const n = r.pts.length; const segs = r.closed ? n : n - 1;
+      for (let j = 0; j < segs; j++) { const a = r.pts[j], c = r.pts[(j + 1) % n]; const mid = M.lerp3(a, c, 0.5); const g = key(...mid.map((v) => Math.floor(v / cs))); let l = grid.get(g); if (!l) grid.set(g, l = []); l.push({ r, j, a, c }); } }
+    const area = R.reduce((a, r) => a + r.C, 0) / K * Math.max(0.5, M.dist(R[0].c, R[K - 1].c) + 0.4);
+    const count = Math.max(6, Math.round((b.cladDensity || o.cladDensity || 5) * area)); const reach = o.cladReach == null ? 0.5 : o.cladReach;
+    const bands = Array.from({ length: K - 1 }, () => []);
     for (let q = 0; q < count; q++) {
-      const y0 = R[0].c[1] + (yTop - R[0].c[1] + 0.2) * rnd(), th0 = TAU * rnd(); const a = (rnd() < 0.5 ? -1 : 1) * (0.15 + 0.85 * rnd()) * maxA; const L = (o.cladLen || 2.6) * (0.6 + 0.8 * rnd());
-      // march along the surface both ways from the middle; past the basket the stick runs straight on
-      const half = (dir) => { const P = []; let y = y0, th = th0, s = 0, last = null; const ds = 0.1;
-        while (s < L / 2) { const sf = surfAt(R, y); const p = M.add(sf.c, [sf.r * Math.cos(th), 0, sf.r * Math.sin(th)]);
-          if (y < yLo || y > yTop + 0.05) { if (!last || P.length < 2) break; const d = M.norm(M.sub(P[P.length - 1], P[P.length - 2])); const run = Math.min(L / 2 - s, (o.cladReach == null ? 0.5 : o.cladReach) * (0.4 + 0.6 * rnd())); const e = M.add(P[P.length - 1], M.mul(d, run)); if (e[1] > 0.03) P.push(e); break; }
-          P.push(p); last = p; s += ds; y += dir * ds * Math.cos(a); th += dir * ds * Math.sin(a) / sf.r; }
+      // the rings mode lays sticks close along a ring (so they are lashed to it); the others start anywhere
+      const u0 = mode === 'rings' && rnd() < 0.7 ? M.clamp(Math.round(rnd() * (K - 1)) + (rnd() - 0.5) * 0.25, 0, K - 1) : rnd() * (K - 1) * 1.04;
+      const th0 = TAU * rnd(); const L = (o.cladLen || 2.6) * (mode === 'rings' ? 0.9 : 0.8) * (0.6 + 0.8 * rnd()); const a0 = cladAngle(mode, b, o, u0, th0, K, rnd);
+      const half = (dir) => { const P = []; let u = u0, th = th0, s = 0; const ds = 0.1;
+        while (s < L / 2) {
+          if (u < 0 || u > K - 1) { if (P.length < 2) break; const d = M.norm(M.sub(P[P.length - 1], P[P.length - 2])); const run = Math.min(L / 2 - s, reach * (0.4 + 0.6 * rnd())); const e = M.add(P[P.length - 1], M.mul(d, run)); if (e[1] > 0.03) P.push(e); break; }
+          const p = surf(R, u, th); if (p[1] < 0.03) break; P.push(p);
+          const al = mode === 'random' ? a0 : a0 + (cladAngle(mode, b, o, u, th, K, () => 0.5) - cladAngle(mode, b, o, u0, th0, K, () => 0.5));
+          const e = 1e-3; const Pu = M.len(M.sub(surf(R, M.clamp(u + e, 0, K - 1), th), surf(R, M.clamp(u - e, 0, K - 1), th))) / (2 * e) || 0.5; const Pt = M.len(M.sub(surf(R, u, th + e), surf(R, u, th - e))) / (2 * e) || 0.5;
+          u += dir * ds * Math.cos(al) / Pu; th += dir * ds * Math.sin(al) / Pt; s += ds;
+        }
         return P; };
       const up = half(1), dn = half(-1); const P = dn.reverse().concat(up.slice(1)); if (P.length < 4) continue;
+      // the surface between rings is ruled, so it creases at each ring: a stick laid over it bends smoothly instead
+      for (let it = 0; it < 6; it++) for (let i = 1; i < P.length - 1; i++) P[i] = M.lerp3(P[i], M.lerp3(P[i - 1], P[i + 1], 0.5), 0.5);
       const Lp = Mo.polyLen(P, false); const n = Mo.segCount(Lp, mat) + 1; const pts = Mo.resample(P, n, false);
-      // where it crosses each ring: lashed there
-      const ties = [];
-      ringRods.forEach((rr, k) => { const r = R[k]; if (!r) return; let best = null; for (let i = 0; i < pts.length - 1; i++) { const y1 = pts[i][1], y2 = pts[i + 1][1]; if ((y1 - r.c[1]) * (y2 - r.c[1]) > 0) continue; const t = Math.abs(y2 - y1) < 1e-9 ? 0 : (r.c[1] - y1) / (y2 - y1); const p = M.lerp3(pts[i], pts[i + 1], t); const nr = rr.pts.length; let bj = 0, bd = Infinity; for (let j = 0; j < nr; j++) { const g = segSeg(p, p, rr.pts[j], rr.pts[(j + 1) % nr]); if (g.d < bd) { bd = g.d; bj = j; best = { i, t, j, tb: g.t, d: g.d }; } } }
-        if (best && best.d < 0.1) ties.push(Object.assign({ rod: rr.id }, best)); });
-      if (ties.length < 2) continue;
-      const strain = maxCurv(pts) * SF.Phys.sectionOf(mat, { profile: 'clad' }).c1 * 1.15; const soak = strain > (mat.elastic_strain || 0.004);
-      const rod = Mo.makeRod(m, 'clad', pts, Lp, stage, false, Object.assign({ profile: 'clad', cls: soak ? 'soak' : 'cold' }, soak ? { rest: pts } : {})); rod.bk = b.id; rod.part = 'clad'; out.push(rod);
-      for (const t of ties) Mo.addJoint(m, rod.id, t.i, t.rod, t.j, stage, Object.assign({}, t.t > 0.001 ? { ta: Math.round(t.t * 1000) / 1000 } : {}, t.tb > 0.001 ? { tb: Math.round(t.tb * 1000) / 1000 } : {}));
+      // lashed wherever it crosses the basket's rods: at most one per 0.35 m of stick, at most five
+      const cand = [];
+      for (let i = 0; i < n - 1; i++) { const mid = M.lerp3(pts[i], pts[i + 1], 0.5); const ci = mid.map((v) => Math.floor(v / cs));
+        for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) for (const sg of grid.get(key(ci[0] + x, ci[1] + y, ci[2] + z)) || []) {
+          const g = segSeg(pts[i], pts[i + 1], sg.a, sg.c); if (g.d < 0.07) cand.push({ i, s: g.s, rod: sg.r.id, j: sg.j, t: g.t, d: g.d, at: (i + g.s) * Lp / (n - 1) }); } }
+      cand.sort((x, y) => x.d - y.d); const ties = [];
+      for (const c of cand) { if (ties.some((t) => Math.abs(t.at - c.at) < 0.35)) continue; ties.push(c); if (ties.length >= 5) break; }
+      // two lashings leave a curved stick free to swing round the line between them: three hold it
+      if (ties.length < 3) continue;
+      bands[M.clamp(Math.floor(u0), 0, K - 2)].push({ pts, Lp, ties });
     }
+    // band by band, bottom up: each band its own stage
+    bands.forEach((list, k) => {
+      if (!list.length) return; if (k > 0 || out.length) stage = Mo.nextStage(m);
+      for (const c of list) {
+        // pre-bent (soaked) only if it really curves: a nearly straight stick's shape gives no hold on which way it turns
+        const sag = Math.max(...c.pts.map((q) => { const A = c.pts[0], Bq = c.pts[c.pts.length - 1]; const ab = M.sub(Bq, A); const t = M.clamp(M.dot(M.sub(q, A), ab) / Math.max(1e-9, M.dot(ab, ab)), 0, 1); return M.dist(q, M.add(A, M.mul(ab, t))); }));
+        const strain = maxCurv(c.pts) * SF.Phys.sectionOf(mat, { profile: 'clad' }).c1 * 1.15; const soak = strain > 0.5 * (mat.elastic_strain || 0.004) && sag > 0.04;
+        if (!soak && strain > 0.5 * (mat.elastic_strain || 0.004)) continue;
+        if (soak && (c.ties.length < 4 || c.Lp < 1.3)) continue; // a short pre-bent piece held at three points rocks on its lashings: it needs four // kinked but not curved enough to pre-bend: it would crack bent cold
+        const rod = Mo.makeRod(m, 'clad', c.pts, c.Lp, stage, false, Object.assign({ profile: 'clad', cls: soak ? 'soak' : 'cold' }, soak ? { rest: c.pts } : {})); rod.bk = b.id; rod.part = 'clad'; rod.band = k; out.push(rod);
+        for (const t of c.ties) Mo.addJoint(m, rod.id, t.i, t.rod, t.j, stage, Object.assign({}, t.s > 0.001 ? { ta: Math.round(t.s * 1000) / 1000 } : {}, t.t > 0.001 ? { tb: Math.round(t.t * 1000) / 1000 } : {}));
+      }
+    });
     return out;
   }
   // the whole pile: every basket in order, each built and struck, then bolted together; then the cladding goes on
   function buildAll(m, baskets, o, s) {
     clear(m); const bs = (baskets || []).map((b) => Object.assign({}, b)); m.meta.baskets = JSON.parse(JSON.stringify(bs)); o = Object.assign(opts(), o || {}); let stage = s; const out = [];
-    bs.forEach((b, i) => { if (i > 0) stage = Mo.nextStage(m); out.push(...build(m, Object.assign(b, { strike: o.strike }), stage)); stage = m.meta.stage; });
-    if (o.ties !== false && bs.length > 1) { stage = Mo.nextStage(m); tie(m, stage); }
+    bs.forEach((b, i) => { if (i > 0) stage = Mo.nextStage(m); out.push(...build(m, Object.assign(b, { strike: o.strike, ties: o.ties }), stage)); stage = m.meta.stage; });
     if (o.strike === 'end') { stage = Mo.nextStage(m); Mo.release(m, stage, new Set(out.map((r) => r.id))); }
     // cladding, basket by basket, on the standing pile; where cladding sticks cross each other or a neighbour, lashed
-    const cl = []; for (const b of bs) if (b.clad) { stage = Mo.nextStage(m); const r = clad(m, b, o, stage); cl.push(...r); out.push(...r); }
+    const cl = []; for (const b of bs) if (b.clad) { stage = Mo.nextStage(m); const r = clad(m, b, o, stage); cl.push(...r); out.push(...r); stage = m.meta.stage; }
     if (cl.length) Mo.autoJoin(m, cl.map((r) => r.id), { radius: 0.06, perRod: 3, spacing: 0.6, perPair: 1 }, stage);
     return out;
   }
@@ -198,7 +278,8 @@ SF.Basket = (function () {
   function make(design, x, z, C) {
     const o = Object.assign(opts(), design.basketOpts || {}); const ids = (design.baskets || []).map((b) => parseInt(String(b.id).slice(1), 10) || 0);
     return { id: 'B' + (Math.max(0, ...ids) + 1), x: Math.round(x * 1000) / 1000, z: Math.round(z * 1000) / 1000, C: clampC(C || 4.4), rings: o.rings, gap: o.gap, shape: o.shape, lean: o.lean, az: o.az,
-      brace: o.brace, spacing: o.spacing, tops: o.tops, door: o.door, doorAz: o.doorAz, ground: o.ground, strike: o.strike, seed: o.seed, clad: !!o.clad };
+      brace: o.brace, spacing: o.spacing, tops: o.tops, door: o.door, doorAz: o.doorAz, ground: o.ground, strike: o.strike, seed: o.seed, clad: !!o.clad,
+      twist: o.twist, tilt: o.tilt, drift: o.drift, tiltMode: o.tiltMode, cladDir: o.cladDir };
   }
   // the notebook plan (Nov 2026): six baskets round a big one, stacked to different heights, clad all over
   function notebook(design) {
@@ -207,7 +288,43 @@ SF.Basket = (function () {
       [-0.18, 0.56, 3.9, 3, 'flare', 0, 0, 'diagonal'], [-1.29, 0.72, 3.77, 2, 'straight', 0, 0, 'diagonal'], [0.52, 1.43, 3.7, 3, 'straight', 10, 70, 'lattice']];
     return spots.map(([x, z, C, n, shape, lean, az, brace], i) => Object.assign(make({ baskets: [], basketOpts: design.basketOpts }, x, z, C), { id: 'B' + (i + 1), rings: n, gap: 0.5, shape, lean, az, brace, tops: 0.4, door: false, seed: 5 + i, clad: true }));
   }
-  const LAYOUTS = [['notebook', 'Notebook plan: six baskets, clad', notebook], ['pile', 'Pile of seven baskets', pile]];
+  // one basket from a short list: x, z, base ring, rings, gap, shape, lean, lean to, twist, ring tilt, drift, tilt pattern, bracing, cladding direction
+  function spec(design, i, a) {
+    const [x, z, C, n, gap, shape, lean, az, twist, tilt, drift, tiltMode, brace, dir, tops] = a;
+    return Object.assign(make({ baskets: [], basketOpts: design.basketOpts }, x, z, C), { id: 'B' + (i + 1), rings: n, gap, shape, lean, az, twist, tilt, drift, tiltMode, brace, tops: tops == null ? 0.3 : tops, door: false, seed: 11 + 7 * i, clad: !!dir, cladDir: dir || 'random', cladDensity: 16 });
+  }
+  // a swirling tower: seven rings tipping round in turn, clad along the rings, with two smaller swirls beside it
+  function swirl(design) {
+    design = design || {};
+    return [[0, 0, 5.0, 7, 0.45, 'barrel', 4, 30, 40, 24, 0.35, 'same', 'lattice', 'rings', 0.4], [1.35, 0.55, 3.9, 4, 0.45, 'taper', 10, 20, -45, 22, 0.2, 'same', 'lattice', 'rings', 0.3],
+      [-1.2, 0.75, 3.7, 3, 0.45, 'flare', 8, 160, 50, 26, 0.15, 'alt', 'diagonal', 'twist', 0.3]].map((a, i) => spec(design, i, a));
+  }
+  // a leaning flame: the stack leans and twists, the cladding runs up it and flares out past the top
+  function flame(design) {
+    design = design || {};
+    return [[0, 0, 4.6, 6, 0.5, 'taper', 14, 200, 18, 16, 0.25, 'same', 'lattice', 'rise', 0.6], [0.95, -0.85, 3.8, 4, 0.5, 'taper', 12, 300, -20, 14, 0.15, 'same', 'stakes', 'rise', 0.5]].map((a, i) => spec(design, i, a));
+  }
+  // the overlapping plan: rings overlapping round a centre, each stack fanning out, bolted where they cross
+  function bloom(design) {
+    design = design || {}; const out = [];
+    for (let i = 0; i < 5; i++) { const a = i * TAU / 5 + 0.3; const r = 0.95 + 0.12 * (i % 2); out.push(spec(design, i, [r * Math.cos(a), r * Math.sin(a), [4.8, 4.2, 4.5, 3.9, 4.4][i], 3 + (i % 3), 0.5, ['barrel', 'flare', 'wave', 'taper', 'barrel'][i], 6, a * 180 / Math.PI, (i % 2 ? -1 : 1) * 30, 28, 0.2, 'open', i % 2 ? 'diagonal' : 'lattice', 'twist', 0.4])); }
+    return out;
+  }
+  // two baskets leaning into each other and crossing, as in the base-basket sketch
+  function crossed(design) {
+    design = design || {};
+    return [[-0.6, 0, 4.4, 5, 0.5, 'flare', 16, 0, 12, 14, 0.2, 'same', 'lattice', 'flow', 0.4], [0.6, 0.15, 4.2, 5, 0.5, 'flare', 16, 180, -12, 14, 0.2, 'same', 'lattice', 'flow', 0.4],
+      [0, 1.25, 3.7, 2, 0.5, 'straight', 0, 0, 0, 18, 0, 'alt', 'diagonal', 'random', 0.2]].map((a, i) => spec(design, i, a));
+  }
+  // baskets along a golden spiral, shrinking and turning as they go round
+  function golden(design) {
+    design = design || {}; const out = []; const g = 1.618;
+    for (let i = 0; i < 6; i++) { const a = i * 0.9; const r = 0.45 * Math.pow(g, a / (Math.PI / 2)) * 0.55 + 0.2 * i; const C = 5.0 - i * 0.2;
+      out.push(spec(design, i, [r * Math.cos(a), r * Math.sin(a), C, Math.max(2, 6 - Math.floor(i / 1.5)), 0.5, i % 2 ? 'taper' : 'barrel', 5 + i, a * 180 / Math.PI + 90, 25 + 5 * i, 16 + 2 * i, 0.15, 'same', i % 3 === 1 ? 'diagonal' : 'lattice', i % 2 ? 'flow' : 'rings', 0.3])); }
+    return out;
+  }
+  const LAYOUTS = [['swirl', 'Swirling tower: rings tipping round, clad along them', swirl], ['bloom', 'Overlapping bloom: five stacks fanning out', bloom], ['flame', 'Leaning flame: cladding rising', flame],
+    ['crossed', 'Crossing baskets: two stacks leaning into each other', crossed], ['golden', 'Golden spiral: six baskets turning', golden], ['notebook', 'Notebook plan: six baskets, clad', notebook], ['pile', 'Pile of seven baskets', pile]];
   // the pile from the plan sketch: rings of different sizes scattered and touching, some leaning
   function pile(design) {
     design = design || {};
@@ -291,5 +408,5 @@ SF.Basket = (function () {
     circles.forEach((c, i) => { const b = make(temp, (c.x - cx) * mpp, (c.y - cy) * mpp, clampC(TAU * c.r * mpp)); b.id = 'B' + (i + 1); b.seed = 3 + i; temp.baskets.push(b); bs.push(b); });
     return { baskets: bs, mpp, cx, cy };
   }
-  return { LIMITS, SHAPES, BRACES, LAYOUTS, notebook, clad, stock, opts, rings, ringPoint, build, buildAll, tie, clear, make, pile, materials, issues, findCircles, fromCircles, clampC };
+  return { LIMITS, SHAPES, BRACES, TILTS, CLAD_DIRS, LAYOUTS, connectRing, surf, notebook, clad, stock, opts, rings, ringPoint, build, buildAll, tie, clear, make, pile, materials, issues, findCircles, fromCircles, clampC };
 })();

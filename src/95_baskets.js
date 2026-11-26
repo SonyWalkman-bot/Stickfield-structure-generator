@@ -5,6 +5,8 @@
   'use strict';
   const app = window.WF; const { M, Mo, V, $, h, fmt } = app; const B = SF.Basket; const TAU = Math.PI * 2; const L = B.LIMITS;
   const UP = [0, 1, 0];
+  // append what is there (conditional rows come through as null)
+  const add = (el, ...xs) => el.append(...xs.filter((x) => x != null && x !== false));
   const list = () => app.W.model.meta.baskets || [];
   app.basketOpts = () => Object.assign(B.opts(), app.design.basketOpts || {});
   const setOpt = (k, v) => { app.design.basketOpts = Object.assign(app.basketOpts(), { [k]: v }); app.autosave(); };
@@ -19,7 +21,7 @@
     if (app.renderBasketPanel) app.renderBasketPanel(); return out;
   };
   // the pile is set by replacing the list in place
-  app.basketLayout = 'notebook';
+  app.basketLayout = 'swirl';
   app.placeBasketLayout = function (id, quiet) { const L0 = B.LAYOUTS.find((x) => x[0] === id) || B.LAYOUTS[0]; return app.rebuildBaskets(quiet ? null : L0[1] + ': built ring by ring', (bs) => { bs.length = 0; bs.push(...L0[2](app.design)); }, quiet ? { toast: false } : {}); };
   // remove every rod, lashing and basket (undo brings them back)
   app.removeAll = async function () {
@@ -104,14 +106,14 @@
     const { slider, seg, segRow, select, check, btn, hint, note } = app.ui; const o = app.basketOpts(); const n = list().length; const seq = app.inSeq();
     badge.hidden = !n; badge.textContent = String(n);
     // sketch
-    b.append(h('h4', { class: 'sub', text: 'Design from a sketch' }));
+    add(b, h('h4', { class: 'sub', text: 'Design from a sketch' }));
     const file = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; try { await addSketch(f); } catch (err) { app.toast(err.message); } } });
-    b.append(file);
+    add(b, file);
     if (!app.sketch) {
-      b.append(h('div', { class: 'btns' }, btn('Add a sketch…', () => file.click(), 'primary')), hint('A photo or drawing of the plan: it lies under the design so you can trace rings on it with the <b>Basket</b> tool (<kbd>B</kbd>), or let Weavefield find the circles. An elevation stands up behind instead.'));
+      add(b, h('div', { class: 'btns' }, btn('Add a sketch…', () => file.click(), 'primary')), hint('A photo or drawing of the plan: it lies under the design so you can trace rings on it with the <b>Basket</b> tool (<kbd>B</kbd>), or let Weavefield find the circles. An elevation stands up behind instead.'));
     } else {
       const s = app.sketch; const upd = () => { showSketch(); app.autosave(); };
-      b.append(segRow('Sketch is', [['plan', 'Plan'], ['front', 'Elevation']], () => s.plane, (v) => { s.plane = v; upd(); V.view(v === 'plan' ? 'top' : 'front'); }),
+      add(b, segRow('Sketch is', [['plan', 'Plan'], ['front', 'Elevation']], () => s.plane, (v) => { s.plane = v; upd(); V.view(v === 'plan' ? 'top' : 'front'); }),
         slider('Width', { min: 1, max: 40, step: 0.1, get: () => s.w, set: (v) => { s.w = v; upd(); }, fmt: (v) => v.toFixed(1) + ' m' }),
         slider('Opacity', { min: 0.1, max: 1, step: 0.05, get: () => s.opacity, set: (v) => { s.opacity = v; upd(); }, fmt: (v) => Math.round(v * 100) + '%' }),
         s.plane === 'plan' ? slider('Turn', { min: -180, max: 180, step: 1, get: () => s.rot || 0, set: (v) => { s.rot = v; upd(); }, fmt: (v) => v + '°' }) : null,
@@ -122,8 +124,8 @@
         hint(s.plane === 'plan' ? 'Circles drawn in the plan become baskets. The sketch is scaled so its biggest circle is the biggest ring a 5 m pole makes (1.6 m across); circles smaller than the tightest ring (1.17 m) are made that size. Crop the picture to the plan first, and remove any extra baskets with the Remove tool.' : 'Trace over the elevation with the Basket tool from the front view; use it to judge heights and how many rings to stack.'));
     }
     // defaults for new baskets
-    b.append(h('h4', { class: 'sub', text: 'New baskets' }));
-    b.append(slider('Rings', { min: 1, max: 7, step: 1, get: () => o.rings, set: (v) => setOpt('rings', v) }),
+    add(b, h('h4', { class: 'sub', text: 'New baskets' }));
+    add(b, slider('Rings', { min: 1, max: 7, step: 1, get: () => o.rings, set: (v) => setOpt('rings', v) }),
       slider('Ring spacing', { min: 0.3, max: 1, step: 0.05, get: () => o.gap, set: (v) => setOpt('gap', v), fmt: (v) => v.toFixed(2) + ' m' }),
       segRow('Profile', B.SHAPES, () => o.shape, (v) => setOpt('shape', v)),
       select('Bracing', B.BRACES.map((x) => [x[0], x[1]]), () => o.brace, (v) => { setOpt('brace', v); app.renderBasketPanel(); }),
@@ -132,37 +134,45 @@
       
       slider('Tops', { min: 0, max: 1.5, step: 0.05, get: () => o.tops, set: (v) => setOpt('tops', v), fmt: (v) => (v ? 'up to ' + v.toFixed(2) + ' m' : 'none') }),
       segRow('Base', [['pegged', 'Pegged', 'The base ring sits on the ground, pegged at four points'], ['staked', 'Staked', 'Sticks run into the ground; the base ring is held up on them']], () => o.ground, (v) => setOpt('ground', v)),
-      check('Leave a doorway in each', () => o.door, (v) => setOpt('door', v)));
-    b.append(h('div', { class: 'btns' }, btn('Apply to every basket', () => { if (!n) { app.toast('No baskets yet: use the Basket tool or a sketch'); return; } app.rebuildBaskets('Every basket rebuilt with these settings', (bs) => { for (const q of bs) Object.assign(q, { rings: o.rings, gap: o.gap, shape: o.shape, brace: o.brace, spacing: o.spacing, tops: o.tops, ground: o.ground, door: o.door }); }); }, '', { disabled: seq || null })));
+      check('Leave a doorway in each', () => o.door, (v) => setOpt('door', v)),
+      h('h4', { class: 'sub', text: 'Twist and overlap' }),
+      slider('Twist', { min: -60, max: 60, step: 1, get: () => o.twist, set: (v) => setOpt('twist', v), fmt: (v) => v + '° a ring' }),
+      slider('Ring tip', { min: 0, max: 40, step: 1, get: () => o.tilt, set: (v) => setOpt('tilt', v), fmt: (v) => (v ? v + '°' : 'level') }),
+      segRow('Tipping', B.TILTS, () => o.tiltMode, (v) => setOpt('tiltMode', v)),
+      slider('Drift', { min: 0, max: 1, step: 0.05, get: () => o.drift, set: (v) => setOpt('drift', v), fmt: (v) => (v ? v.toFixed(2) + ' m' : 'none') }),
+      hint('Each ring above the base tips by <b>Ring tip</b> towards a direction that turns by <b>Twist</b> at every ring, and the centres drift round a widening spiral. Tipped rings cut through each other: they are bolted wherever they cross, as each one goes up.'));
+    add(b, h('div', { class: 'btns' }, btn('Apply to every basket', () => { if (!n) { app.toast('No baskets yet: use the Basket tool or a sketch'); return; } app.rebuildBaskets('Every basket rebuilt with these settings', (bs) => { for (const q of bs) Object.assign(q, { rings: o.rings, gap: o.gap, shape: o.shape, brace: o.brace, spacing: o.spacing, tops: o.tops, ground: o.ground, door: o.door, twist: o.twist, tilt: o.tilt, drift: o.drift, tiltMode: o.tiltMode }); delete q.ringEdits; }); }, '', { disabled: seq || null })));
     // build
-    b.append(h('h4', { class: 'sub', text: 'Building it' }));
-    b.append(segRow('Formwork out', [['each', 'After each basket', 'Each basket must stand on its own before the next is started'], ['end', 'At the end', 'Rings stay on their formwork until every basket is up and bolted together']], () => o.strike, (v) => { setOpt('strike', v); if (n) app.rebuildBaskets('Rebuilt: formwork out ' + (v === 'end' ? 'at the end' : 'after each basket')); }),
+    add(b, h('h4', { class: 'sub', text: 'Building it' }));
+    add(b, segRow('Formwork out', [['each', 'After each basket', 'Each basket must stand on its own before the next is started'], ['end', 'At the end', 'Rings stay on their formwork until every basket is up and bolted together']], () => o.strike, (v) => { setOpt('strike', v); if (n) app.rebuildBaskets('Rebuilt: formwork out ' + (v === 'end' ? 'at the end' : 'after each basket')); }),
       check('Bolt baskets together where rings meet', () => o.ties !== false, (v) => { setOpt('ties', v); if (n) app.rebuildBaskets(v ? 'Baskets bolted together where they meet' : 'Baskets stand apart'); }));
-    b.append(app.ui.select('Layout', B.LAYOUTS.map((x) => [x[0], x[1]]), () => app.basketLayout, (v) => { app.basketLayout = v; }));
-    b.append(h('div', { class: 'btns' }, btn(n ? 'Replace with this layout' : 'Build this layout', async () => { if (n && !(await app.confirm({ title: 'Replace the baskets?', text: 'The layout replaces the ' + n + ' baskets here; undo brings them back.', ok: 'Replace' }))) return; app.placeBasketLayout(app.basketLayout); app.frameAll(); }, n ? '' : 'primary', { disabled: seq || null }),
+    add(b, app.ui.select('Layout', B.LAYOUTS.map((x) => [x[0], x[1]]), () => app.basketLayout, (v) => { app.basketLayout = v; }));
+    add(b, h('div', { class: 'btns' }, btn(n ? 'Replace with this layout' : 'Build this layout', async () => { if (n && !(await app.confirm({ title: 'Replace the baskets?', text: 'The layout replaces the ' + n + ' baskets here; undo brings them back.', ok: 'Replace' }))) return; app.placeBasketLayout(app.basketLayout); app.frameAll(); }, n ? '' : 'primary', { disabled: seq || null }),
       btn('Remove all', () => app.removeAll(), 'danger', { disabled: seq || !app.W.model.rods.size || null })));
     // cladding
     const nClad = list().filter((q) => q.clad).length; const reclad = (label) => { if (nClad) app.rebuildBaskets(label); };
-    b.append(h('h4', { class: 'sub', text: 'Cladding' }));
-    b.append(h('div', { class: 'btns' }, btn(nClad === n && n ? 'Take the cladding off' : 'Clad every basket', () => { if (!n) { app.toast('No baskets to clad yet'); return; } const on = !(nClad === n); app.rebuildBaskets(on ? 'Cladding on every basket: thin sticks laid over the outside, lashed where they cross the rings' : 'Cladding taken off', (bs) => { for (const q of bs) q.clad = on; }); }, nClad === n && n ? '' : 'primary', { disabled: seq || !n || null })),
-      slider('Density', { min: 1, max: 12, step: 0.5, get: () => o.cladDensity, set: (v) => { setOpt('cladDensity', v); reclad('Cladding rebuilt: ' + v + ' sticks per m²'); }, change: true, fmt: (v) => v + ' per m²' }),
+    add(b, h('h4', { class: 'sub', text: 'Cladding' }));
+    add(b, select('Direction', B.CLAD_DIRS.map((x) => [x[0], x[1]]), () => o.cladDir, (v) => { setOpt('cladDir', v); if (nClad) app.rebuildBaskets('Cladding runs ' + (B.CLAD_DIRS.find((x) => x[0] === v) || [0, v])[1].toLowerCase() + ' on every clad basket', (bs) => { for (const q of bs) q.cladDir = v; }); else app.renderBasketPanel(); }),
+      hint((B.CLAD_DIRS.find((x) => x[0] === o.cladDir) || B.CLAD_DIRS[4])[2] + '. The sticks follow the basket underneath, so twisted and tipped rings show through.'));
+    add(b, h('div', { class: 'btns' }, btn(nClad === n && n ? 'Take the cladding off' : 'Clad every basket', () => { if (!n) { app.toast('No baskets to clad yet'); return; } const on = !(nClad === n); app.rebuildBaskets(on ? 'Cladding on every basket: thin sticks laid over the outside, lashed where they cross the rings' : 'Cladding taken off', (bs) => { for (const q of bs) q.clad = on; }); }, nClad === n && n ? '' : 'primary', { disabled: seq || !n || null })),
+      slider('Density', { min: 1, max: 24, step: 0.5, get: () => o.cladDensity, set: (v) => { setOpt('cladDensity', v); if (nClad) app.rebuildBaskets('Cladding rebuilt: ' + v + ' tries per m²', (bs) => { for (const q of bs) q.cladDensity = v; }); }, change: true, fmt: (v) => v + ' per m²' }),
       slider('Angle', { min: 5, max: 85, step: 1, get: () => o.cladAngle, set: (v) => { setOpt('cladAngle', v); reclad('Cladding rebuilt at up to ' + v + '° from upright'); }, change: true, fmt: (v) => 'up to ' + v + '°' }),
       slider('Stick length', { min: 1, max: 5, step: 0.1, get: () => o.cladLen, set: (v) => { setOpt('cladLen', v); reclad('Cladding rebuilt'); }, change: true, fmt: (v) => 'about ' + v.toFixed(1) + ' m' }),
       slider('Runs past', { min: 0, max: 1.5, step: 0.05, get: () => o.cladReach, set: (v) => { setOpt('cladReach', v); reclad('Cladding rebuilt'); }, change: true, fmt: (v) => (v ? 'up to ' + v.toFixed(2) + ' m' : 'none') }),
       hint('The thin 10 × 20 mm sticks, bent onto the outside of each basket at all angles and lashed wherever they cross a ring or each other; their ends run on past the basket. A stick that crosses fewer than two rings is left off. It goes on last, once the baskets stand.' + (nClad ? ' ' + nClad + ' of ' + n + ' baskets clad.' : '')));
-    b.append(hint('Each ring is one 18-20 mm pole, soaked, bent round its formwork, lapped and bolted. Rings go up one at a time, held on formwork, and the sticks are bolted in; then the formwork comes out. Scrub the build order below to watch each step settle.'));
+    add(b, hint('Each ring is one 18-20 mm pole, soaked, bent round its formwork, lapped and bolted. Rings go up one at a time, held on formwork, and the sticks are bolted in; then the formwork comes out. Scrub the build order below to watch each step settle.'));
     // material
     const mat = B.materials(app.W.model, app.design); const st = Object.assign(B.stock(), app.design.stock || {});
-    b.append(h('h4', { class: 'sub', text: 'Material against stock' }));
+    add(b, h('h4', { class: 'sub', text: 'Material against stock' }));
     const tb = h('table', { class: 'cuttable' }); tb.append(h('tr', {}, h('th', { text: 'What' }), h('th', { text: 'Needs' }), h('th', { text: 'In stock' })));
     const keys = ['poles', 'sticks', 'thin', 'bolts', 'clamps'];
     mat.rows.forEach((r, i) => { const k = keys[i]; const inp = h('input', { type: 'number', min: 0, step: 1, value: st[k], 'aria-label': r.what + ' in stock', style: { width: '64px' }, onchange: () => { app.design.stock = Object.assign({}, st, { [k]: Math.max(0, +inp.value || 0) }); app.autosave(); app.renderBasketPanel(); } });
       const u = r.have ? r.need / r.have : 9; tb.append(h('tr', { class: r.need > r.have ? 'over' : '', title: r.note }, h('td', { class: 't', text: r.what }), h('td', {}, app.ui.statusEl(u, String(r.need))), h('td', {}, inp))); });
-    b.append(tb, hint(mat.rings + ' rings, ' + fmt.n(mat.stickLen, 0) + ' m of sticks in ' + mat.sticks + ' pieces packed into 5 m lengths, ' + mat.bolts + ' bolts. Also in the yard: ' + st.uncut + ' uncut poles and the offcuts.' + (mat.splices ? ' ' + mat.splices + ' rings over 4.75 m need a splice piece to lap.' : '')));
+    add(b, tb, hint(mat.rings + ' rings, ' + fmt.n(mat.stickLen, 0) + ' m of sticks in ' + mat.sticks + ' pieces packed into 5 m lengths, ' + mat.bolts + ' bolts. Also in the yard: ' + st.uncut + ' uncut poles and the offcuts.' + (mat.splices ? ' ' + mat.splices + ' rings over 4.75 m need a splice piece to lap.' : '')));
     // limits
     const iss = B.issues(app.W.model);
-    if (iss.length) { const crit = iss.filter((x) => x.level === 'crit').length; b.append(note('<b>' + (crit ? crit + ' beyond what the material does' : iss.length + ' to test first') + '.</b> ' + app.esc(iss[0].text) + (iss.length > 1 ? ' (and ' + (iss.length - 1) + ' more)' : ''), crit ? 'crit' : 'warn'), h('div', { class: 'btns' }, btn('Select them', () => app.setSel(iss.map((x) => x.id), [])))); }
-    else if (n) b.append(note('Every ring is 3.7-4.5 m round and no stick bends tighter than a soaked one can.', 'ok'));
+    if (iss.length) { const crit = iss.filter((x) => x.level === 'crit').length; add(b, note('<b>' + (crit ? crit + ' beyond what the material does' : iss.length + ' to test first') + '.</b> ' + app.esc(iss[0].text) + (iss.length > 1 ? ' (and ' + (iss.length - 1) + ' more)' : ''), crit ? 'crit' : 'warn'), h('div', { class: 'btns' }, btn('Select them', () => app.setSel(iss.map((x) => x.id), [])))); }
+    else if (n) add(b, note('Every ring is 3.7-4.5 m round and no stick bends tighter than a soaked one can.', 'ok'));
   };
 
   // ---------------------------------------------------------------- the basket editor (selection)
@@ -170,9 +180,25 @@
     const { slider, segRow, select, check, btn } = app.ui; const bk = list().find((q) => q.id === rod.bk); if (!bk) return; const seq = app.inSeq();
     const change = (k, label) => (v) => app.rebuildBaskets(null, (bs) => { const q = bs.find((x) => x.id === bk.id); q[k] = v; return { select: bk.id, rk: rod.rk || 0 }; }, { toast: false });
     const box = h('div', { class: 'basket-ed' });
-    box.append(h('div', { class: 'row two' }, h('span', { class: 'lab', html: '<b style="color:var(--ink)">Basket ' + bk.id + '</b>' }), h('span', { class: 'hint', text: bk.rings + ' rings · ' + (rod.kind === 'ring' ? 'ring ' + ((rod.rk || 0) + 1) + ' of ' + bk.rings + ', ' + ringLabel(rod.L) : rod.kind) })));
+    // one ring on its own: resize, tip, turn and shift it (kept as an edit on top of the basket's rule)
+    const k = rod.rk || 0; const ed = (bk.ringEdits || {})[k] || {};
+    const editRing = (key) => (v) => app.rebuildBaskets(null, (bs) => { const q = bs.find((x) => x.id === bk.id); q.ringEdits = q.ringEdits || {}; const e = q.ringEdits[k] = Object.assign({}, q.ringEdits[k], { [key]: v }); if (!v && key !== 'tilt') delete e[key]; return { select: bk.id, rk: k }; }, { toast: false });
+    if (rod.kind === 'ring' && !seq) {
+      const cur = (B.rings(bk)[k] || { C: rod.L });
+      add(box, h('h4', { class: 'sub', text: 'This ring (' + (k + 1) + ' of ' + bk.rings + ')' }),
+        slider('Size', { min: -1.3, max: 1.3, step: 0.05, change: true, get: () => ed.dC || 0, set: editRing('dC'), fmt: (v) => (v >= 0 ? '+' : '') + v.toFixed(2) + ' m · ' + cur.C.toFixed(2) + ' m round' }),
+        slider('Tip', { min: 0, max: 50, step: 1, change: true, get: () => (ed.tilt != null ? ed.tilt : (bk.tilt || 0)), set: editRing('tilt'), fmt: (v) => v + '°' }),
+        slider('Tip turned', { min: -180, max: 180, step: 5, change: true, get: () => ed.az || 0, set: editRing('az'), fmt: (v) => v + '°' }),
+        slider('Shift across', { min: -1, max: 1, step: 0.05, change: true, get: () => ed.dx || 0, set: editRing('dx'), fmt: (v) => v.toFixed(2) + ' m' }),
+        slider('Shift back', { min: -1, max: 1, step: 0.05, change: true, get: () => ed.dz || 0, set: editRing('dz'), fmt: (v) => v.toFixed(2) + ' m' }),
+        slider('Raise', { min: -0.4, max: 0.8, step: 0.05, change: true, get: () => ed.dy || 0, set: editRing('dy'), fmt: (v) => v.toFixed(2) + ' m' }),
+        (bk.ringEdits && bk.ringEdits[k]) ? h('div', { class: 'btns' }, btn('Put this ring back', () => app.rebuildBaskets(null, (bs) => { const q = bs.find((x) => x.id === bk.id); if (q.ringEdits) delete q.ringEdits[k]; return { select: bk.id, rk: k }; }, { toast: false }))) : null,
+        app.ui.hint('Changes here move only this ring; the sticks through it and the bolts where it crosses other rings are worked out again.'),
+        h('h4', { class: 'sub', text: 'The whole basket' }));
+    }
+    add(box, h('div', { class: 'row two' }, h('span', { class: 'lab', html: '<b style="color:var(--ink)">Basket ' + bk.id + '</b>' }), h('span', { class: 'hint', text: bk.rings + ' rings · ' + (rod.kind === 'ring' ? 'ring ' + ((rod.rk || 0) + 1) + ' of ' + bk.rings + ', ' + ringLabel(rod.L) : rod.kind) })));
     if (!seq) {
-      box.append(slider('Base ring', { min: L.cMin, max: L.cMax, step: 0.05, change: true, get: () => bk.C, set: change('C'), fmt: (v) => v.toFixed(2) + ' m round' + (v > L.cTested ? ' · untested' : '') }),
+      add(box, slider('Base ring', { min: L.cMin, max: L.cMax, step: 0.05, change: true, get: () => bk.C, set: change('C'), fmt: (v) => v.toFixed(2) + ' m round' + (v > L.cTested ? ' · untested' : '') }),
         slider('Rings', { min: 1, max: 9, step: 1, change: true, get: () => bk.rings, set: change('rings') }),
         slider('Ring spacing', { min: 0.3, max: 1, step: 0.05, change: true, get: () => bk.gap, set: change('gap'), fmt: (v) => v.toFixed(2) + ' m' }),
         segRow('Profile', B.SHAPES, () => bk.shape, change('shape')),
@@ -182,7 +208,12 @@
         slider('Stick spacing', { min: 0.25, max: 0.9, step: 0.05, change: true, get: () => bk.spacing, set: change('spacing'), fmt: (v) => v.toFixed(2) + ' m' }),
         slider('Tops', { min: 0, max: 1.5, step: 0.05, change: true, get: () => bk.tops || 0, set: change('tops'), fmt: (v) => (v ? v.toFixed(2) + ' m' : 'none') }),
         segRow('Base', [['pegged', 'Pegged'], ['staked', 'Staked']], () => bk.ground || 'pegged', change('ground')),
+        slider('Twist', { min: -60, max: 60, step: 1, change: true, get: () => bk.twist || 0, set: change('twist'), fmt: (v) => v + '° a ring' }),
+        slider('Ring tip', { min: 0, max: 40, step: 1, change: true, get: () => bk.tilt || 0, set: change('tilt'), fmt: (v) => (v ? v + '°' : 'level') }),
+        segRow('Tipping', B.TILTS, () => bk.tiltMode || 'same', change('tiltMode')),
+        slider('Drift', { min: 0, max: 1, step: 0.05, change: true, get: () => bk.drift || 0, set: change('drift'), fmt: (v) => (v ? v.toFixed(2) + ' m' : 'none') }),
         check('Cladding', () => bk.clad, change('clad')),
+        bk.clad ? select('Cladding runs', B.CLAD_DIRS.map((x) => [x[0], x[1]]), () => bk.cladDir || 'random', change('cladDir')) : null,
         check('Doorway', () => bk.door, change('door')),
         bk.door ? slider('Doorway faces', { min: 0, max: 359, step: 1, change: true, get: () => bk.doorAz || 0, set: change('doorAz'), fmt: (v) => v + '°' }) : null,
         slider('Move across', { min: -12, max: 12, step: 0.05, change: true, get: () => bk.x, set: change('x'), fmt: (v) => v.toFixed(2) + ' m' }),
@@ -190,7 +221,7 @@
         h('div', { class: 'btns' }, btn('Stack a ring', () => stackOn(bk.id)), btn('Copy beside', () => app.rebuildBaskets(null, (bs) => { const nb = Object.assign(B.make({ baskets: bs, basketOpts: app.basketOpts() }, 0, 0, bk.C), JSON.parse(JSON.stringify(bk))); const id = 'B' + (Math.max(...bs.map((x) => parseInt(x.id.slice(1), 10) || 0)) + 1); Object.assign(nb, { id, x: bk.x + bk.C / Math.PI * 0.9, seed: (bk.seed || 3) + 11 }); bs.push(nb); app.toast('Basket ' + id + ' copied beside ' + bk.id); return { select: id, rk: 0 }; }, { toast: false })),
           btn('Remove basket', () => { app.rebuildBaskets('Basket ' + bk.id + ' removed', (bs) => { const i = bs.findIndex((x) => x.id === bk.id); if (i >= 0) bs.splice(i, 1); }); app.clearSel(); }, 'danger')));
     }
-    b.append(box);
+    add(b, box);
   };
 
   // ---------------------------------------------------------------- saving the sketch with the design

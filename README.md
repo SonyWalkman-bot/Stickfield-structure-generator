@@ -24,9 +24,13 @@ Everything is in that one file, so you can share it by email, a shared drive or 
 - **Start with rings.** Set out baskets of stacked rings with the Basket tool, or lay a sketch of the plan under the
   design and trace it, or let Weavefield find the circles in it. Rings stay inside what the material does: 3.7 to
   5.0 m round, one 18-20 mm pole each, soaked and bent.
+- **Twist and overlap.** Rings can tip, turn round the stack as they go up and drift off centre, so baskets swirl,
+  zigzag and fan open; tipped rings cut through each other and are bolted where they cross. Pick any ring to resize,
+  tip or move it on its own.
 - **Brace the rings.** Lattice, diagonal, stake or spiral bracing, with tops that run up past the last ring and
   doorways left open. Every basket can lean, taper, flare or bulge; pick a ring to change its basket.
-- **Clad it.** Cover the baskets in thin sticks laid at all angles, lashed where they cross the rings, their ends
+- **Clad it.** Cover the baskets in thin sticks that follow their shape (along the rings, with the twist, rising like
+  a flame, or flowing from one to the other), lashed where they cross the rings, their ends
   running on past the baskets.
 - **Build it step by step.** Each ring goes up on its formwork and is braced before the next; then the formwork comes
   out and the basket has to stand. Baskets are bolted together where their rings cross. Scrub the build order to see

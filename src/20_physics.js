@@ -222,7 +222,9 @@ SF.Phys = (function () {
         V.fill(0); sim.kePrev = 0; sim.restart = true;
       } else sim.kePrev = ke;
       sim.iterations++; sim.vmax = vmax;
-      if ((sim.iterations & 31) === 0 && sim.pre.length) updateRest(sim);
+      // pre-bent rods' rest shapes turn with them until the structure has nearly settled, then hold (refitting a short,
+      // gently curved rod every 32 steps can otherwise keep it rocking for ever)
+      if ((sim.iterations & 31) === 0 && sim.pre.length && !(res < 20 * TOL && vmax < 20 * VTOL)) updateRest(sim);
       if (sim.creep && (sim.iterations & 15) === 0) { // new lashings' grip follows until the structure has (nearly) settled, then holds
         const br = sim.br, bn = sim.brNew;
         for (let q = 0, b = 0; q < br.length; q += 4, b++) if (bn[b]) { const u = 3 * br[q], w = 3 * br[q + 1]; br[q + 2] = Math.hypot(X[w] - X[u], X[w + 1] - X[u + 1], X[w + 2] - X[u + 2]); }

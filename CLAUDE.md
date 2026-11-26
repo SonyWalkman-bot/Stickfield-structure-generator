@@ -103,7 +103,8 @@ the replay can put the scaffolding back.
 - Bending springs act on each run of three nodes and push x(i−1) − 2·x(i) + x(i+1) towards its rest value, with
   k_b = EI/v³.
 - Pre-bent rods (steam-bent frame members, soaked sticks) take their rest values from their rest shape. That shape is
-  re-fitted to the rod's current orientation every 32 iterations (Kabsch), so it does not matter how the rod turns.
+  re-fitted to the rod's current orientation every 32 iterations (Kabsch), so it does not matter how the rod turns,
+  until the structure has nearly settled; then it holds, or a short gently curved rod can rock for ever.
 
 **Lashings** are zero-length springs (`joint_stiffness`, 20 kN/m) between a point on each rod.
 
@@ -151,12 +152,19 @@ The material limits come from the bending tests and are in `SF.Basket.LIMITS`; k
 - A basket is a definition: base ring size, ring count and spacing, profile, lean, bracing (lattice, diagonals,
   stakes or spiral), stick spacing, tops, doorway and base. `Basket.buildAll(m, baskets, opts, stage)` rebuilds every
   basket from the definitions, so any edit to a basket rebuilds them all.
-- The build: the base ring on the ground (pegged), each ring above held on formwork, the sticks bolted in, then the
-  formwork struck (after each basket, or at the end), then baskets bolted where their rings cross.
-- Cladding (`clad`, per basket `b.clad`) goes on last: thin 10 × 20 mm sticks (profile `clad`, a 14 mm square of the
-  same area) marched over the basket's surface at random angles, lashed where they cross rings, kept only if lashed
-  twice. They are counted against the thin sticks in stock.
-- Layouts live in `SF.Basket.LAYOUTS`; `notebook` (six clad baskets) is the first visit.
+- Rings can twist and tip: each ring above the base tips by `tilt` towards a direction that turns by `twist` per ring
+  (`tiltMode`: same, alternate or fanning open), and the centres drift round a widening helix (`drift`).
+  `b.ringEdits[k]` (`dC`, `tilt`, `az`, `dx`, `dy`, `dz`) moves one ring on its own; the rule stays for the rest.
+- The build: the base ring on the ground (pegged), then each ring above on its formwork, bolted as it goes up to every
+  ring already standing that it crosses (its own and other baskets', `connectRing`), then the sticks; then the formwork
+  is struck (after each basket, or at the end). Continuous sticks are cut where tipped rings fold into each other.
+- Cladding (`clad`, per basket `b.clad`) goes on last, band by band: thin 10 × 20 mm sticks (profile `clad`, a 14 mm
+  square of the same area) marched over the ruled surface through the rings (`surf`) in a direction (`cladDir`: along
+  rings, twist, rise, flow or random), smoothed over the creases, lashed wherever they cross the basket's rods. A stick
+  needs three lashings (four if pre-bent); kinked sticks that would crack cold are left off. They count against the
+  thin sticks in stock.
+- Layouts live in `SF.Basket.LAYOUTS`; `swirl` (a twisting, clad tower) is the first visit. `test/t_baskets.js` checks
+  every layout settles inside its strength with nothing bent beyond the tested limits.
 - `findCircles` is a plain Hough transform on a greyscale array; it runs in Node, so test it there.
 
 ## Growth (`40_grow.js`, from Stickfield)

@@ -35,6 +35,18 @@ W.edit((m, s) => B.buildAll(m, [], null, s)); ok(W.model.rods.size === 0, 'baske
   const m2 = B.materials(W2.model, {}); const thin = m2.rows.find((x) => /Thin/.test(x.what)); ok(thin.need > 10 && thin.need <= thin.have, 'cladding uses ' + thin.need + ' of ' + thin.have + ' thin sticks');
   ok(B.issues(W2.model).every((x) => x.level !== 'crit'), 'nothing bent beyond what the material does');
 }
+// every layout: twisted, tipped and overlapping rings bolted where they cross, clad along the shape, and it all stands
+for (const [id, , fn] of B.LAYOUTS) {
+  const W3 = SF.World.create(SF.Defaults.design(), SF.Defaults.params()); W3.edit((m, s) => B.buildAll(m, fn({}), null, s));
+  const rings = Array.from(W3.model.rods.values()).filter((r) => r.kind === 'ring'); const ringBolts = W3.model.joints.filter((j) => j.type === 'bolt' && W3.model.rods.get(j.a).kind === 'ring' && W3.model.rods.get(j.b).kind === 'ring').length;
+  const r3 = PH.relax(W3.sim, { budgetMs: 20000 }); W3.settled = r3.settled; W3.sync(); const S3 = SF.Checks.summary(W3);
+  ok(r3.settled && S3.peak < 1.05 && B.issues(W3.model).every((x) => x.level !== 'crit'), id + ': ' + rings.length + ' rings, ' + ringBolts + ' ring-to-ring bolts, settles, peak ' + (S3.peak * 100).toFixed(0) + '%');
+}
+// one ring moved on its own: only that ring changes size
+{
+  const bs = B.LAYOUTS[0][2]({}); const before = B.rings(bs[0]).map((r) => r.C); bs[0].ringEdits = { 3: { dC: -1.0, tilt: 35 } }; const after = B.rings(bs[0]);
+  ok(after[3].C < before[3] - 0.3 && after[3].C >= B.LIMITS.cMin && after[2].C === before[2] && after[4].C === before[4] && Math.abs(Math.acos(after[3].n[1]) * 180 / Math.PI - 35) < 0.5, 'a ring edited on its own: ' + before[3].toFixed(2) + ' → ' + after[3].C.toFixed(2) + ' m round, tipped 35°');
+}
 // rings drawn in a plan are found
 {
   const w = 200, h = 160; const g = new Float32Array(w * h).fill(1); const circ = [[60, 70, 30], [130, 60, 22], [120, 120, 16]];
